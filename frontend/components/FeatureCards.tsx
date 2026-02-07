@@ -27,7 +27,7 @@ const features = [
     ),
     title: "One Command Deploy",
     description:
-      "Migrate your entire stack — backend, frontend, and database — with a single CLI command. Zero manual config.",
+      "Migrate your entire stack, backend, frontend, and database, with a single CLI command. Zero manual config.",
   },
   {
     icon: (
