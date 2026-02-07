@@ -163,7 +163,7 @@ export default function Hero() {
             <path
               d="M350 160H90a70 70 0 0 1-10-139.2A80 80 0 0 1 230 40a60 60 0 0 1 100 20 50 50 0 0 1 20 100z"
               stroke="url(#cloudStroke)"
-              strokeWidth="3.6"
+              strokeWidth="5"
               fill="none"
             />
           </svg>
