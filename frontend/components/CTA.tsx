@@ -19,7 +19,7 @@ export default function CTA() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="https://github.com/sanathmahesh/cloudify"
+                href="http://localhost:5173/" target="_blank" rel="noopener noreferrer"
                 className="bg-accent-purple hover:bg-accent-purple-light text-white rounded-full px-8 py-3.5 font-medium transition-all hover:scale-[1.02] animate-glow"
               >
                 Start Migration

@@ -28,30 +28,9 @@ export default function Footer() {
               Cloudify
             </span>
             <p className="text-text-muted text-sm mt-4 leading-relaxed">
-              Migrate Spring Boot + React apps to GCP in one command. Built with
+              Migrate apps to cloud in one command. Built with
               Dedalus AI &amp; Claude.
             </p>
-            <div className="mt-6">
-              <p className="text-xs uppercase tracking-wider text-text-muted">
-                Newsletter
-              </p>
-              <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                <input
-                  type="email"
-                  placeholder="you@company.com"
-                  className="flex-1 bg-bg-primary/60 border border-border-subtle rounded-full px-4 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-accent-purple/60"
-                />
-                <a
-                  href="https://github.com/sanathmahesh/cloudify"
-                  className="bg-accent-purple hover:bg-accent-purple-light text-white rounded-full px-5 py-2 text-sm font-medium transition-colors text-center"
-                >
-                  Notify me
-                </a>
-              </div>
-              <p className="text-xs text-text-muted mt-2">
-                Updates delivered via GitHub releases.
-              </p>
-            </div>
           </div>
 
           {/* Link columns */}
