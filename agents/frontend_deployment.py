@@ -148,7 +148,10 @@ class FrontendDeploymentAgent(BaseAgent):
                 deployment_result["deployed"] = True
                 deployment_result["hosting_url"] = deploy_result["hosting_url"]
             else:
-                errors.append(f"Firebase deployment failed: {deploy_result.get('error')}")
+                error_msg = deploy_result.get('error', 'Unknown error')
+                # Log the full error for debugging
+                self.logger.error(f"Firebase deployment failed with error: {error_msg}")
+                errors.append(f"Firebase deployment failed: {error_msg}")
                 return AgentResult(
                     status=AgentStatus.FAILED,
                     data=deployment_result,
@@ -346,7 +349,7 @@ VITE_BACKEND_URL={backend_url}
                 }
 
             # Deploy to specific hosting site
-            deploy_cmd = f"firebase deploy --only hosting:{site_name} --project={project_id}"
+            deploy_cmd = f"firebase deploy --only hosting --project={project_id}"
 
             result = await self._run_command(deploy_cmd, cwd=frontend_path)
 
@@ -366,7 +369,10 @@ VITE_BACKEND_URL={backend_url}
                     "hosting_url": hosting_url,
                 }
             else:
-                return {"success": False, "error": result["stderr"]}
+                # Include both stdout and stderr for better error diagnosis
+                error_output = result["stderr"] or result["stdout"]
+                self.logger.error(f"Firebase deploy command failed. stdout: {result['stdout']}, stderr: {result['stderr']}")
+                return {"success": False, "error": error_output}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
