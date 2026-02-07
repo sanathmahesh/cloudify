@@ -260,43 +260,41 @@ VITE_BACKEND_URL={backend_url}
             if not site_result["success"]:
                 self.logger.warning(f"Could not verify/create hosting site: {site_result.get('error')}")
 
-            # Check if firebase.json already exists
+            # Create/update firebase.json with site configuration
             firebase_config_file = frontend_path / "firebase.json"
 
-            if not firebase_config_file.exists():
-                # Create firebase.json with site configuration
-                firebase_config = {
-                    "hosting": {
-                        "site": site_name,  # Specify the hosting site
-                        "public": "dist",  # Vite default
-                        "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-                        "rewrites": [
-                            {
-                                "source": "**",
-                                "destination": "/index.html"
-                            }
-                        ]
-                    }
+            # Always create/update to ensure correct configuration
+            firebase_config = {
+                "hosting": {
+                    "site": site_name,  # Specify the hosting site
+                    "public": "dist",  # Vite default
+                    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+                    "rewrites": [
+                        {
+                            "source": "**",
+                            "destination": "/index.html"
+                        }
+                    ]
                 }
+            }
 
-                # Check if build directory is 'build' instead of 'dist'
-                if (frontend_path / "build").exists():
-                    firebase_config["hosting"]["public"] = "build"
+            # Check if build directory is 'build' instead of 'dist'
+            if (frontend_path / "build").exists() and not (frontend_path / "dist").exists():
+                firebase_config["hosting"]["public"] = "build"
 
-                firebase_config_file.write_text(json.dumps(firebase_config, indent=2))
+            firebase_config_file.write_text(json.dumps(firebase_config, indent=2))
+            self.logger.info(f"Firebase config created/updated: {firebase_config_file}")
 
-                self.logger.info(f"Firebase config created: {firebase_config_file}")
-
-            # Create .firebaserc
+            # Create/update .firebaserc
             firebaserc_file = frontend_path / ".firebaserc"
-            if not firebaserc_file.exists():
-                firebaserc_config = {
-                    "projects": {
-                        "default": project_id
-                    }
+            firebaserc_config = {
+                "projects": {
+                    "default": project_id
                 }
+            }
 
-                firebaserc_file.write_text(json.dumps(firebaserc_config, indent=2))
+            firebaserc_file.write_text(json.dumps(firebaserc_config, indent=2))
+            self.logger.info(f"Firebase RC file created/updated: {firebaserc_file}")
 
             return {"success": True, "site_name": site_name}
 
@@ -349,7 +347,7 @@ VITE_BACKEND_URL={backend_url}
                 }
 
             # Deploy to specific hosting site
-            deploy_cmd = f"firebase deploy --only hosting --project={project_id}"
+            deploy_cmd = f"firebase deploy --only hosting:{site_name} --project={project_id}"
 
             result = await self._run_command(deploy_cmd, cwd=frontend_path)
 

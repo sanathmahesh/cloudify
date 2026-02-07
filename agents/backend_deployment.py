@@ -6,6 +6,7 @@ Deploys Spring Boot application to Google Cloud Run.
 
 import asyncio
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict
 
@@ -94,6 +95,17 @@ class BackendDeploymentAgent(BaseAgent):
                     data=deployment_result,
                     errors=errors,
                 )
+
+            # Update CORS configuration with frontend URL
+            site_name = self.config.get("gcp", {}).get("frontend", {}).get("site_name")
+            if site_name:
+                frontend_url = f"https://{site_name}.web.app"
+                self.logger.info(f"Updating CORS configuration for frontend: {frontend_url}")
+                cors_result = await self._update_cors_configuration(backend_path, frontend_url)
+                if cors_result["success"]:
+                    self.logger.info(f"CORS configuration updated: {cors_result.get('files_updated', 0)} file(s)")
+                else:
+                    warnings.append(f"CORS update: {cors_result.get('error')}")
 
             # Build Docker image
             gcp_config = self.config.get("gcp", {})
@@ -349,6 +361,65 @@ Provide ONLY the Dockerfile content, no explanations.
             self.logger.warning(f"Could not get service URL: {str(e)}")
 
         return f"https://{service_name}-<hash>-{region}.run.app"
+
+    async def _update_cors_configuration(
+        self, backend_path: Path, frontend_url: str
+    ) -> Dict[str, Any]:
+        """Update CORS configuration in backend source to allow the frontend origin."""
+        try:
+            src_java = backend_path / "src" / "main" / "java"
+            if not src_java.exists():
+                return {"success": False, "error": "No Java source directory found"}
+
+            files_updated = 0
+
+            for java_file in src_java.rglob("*.java"):
+                content = java_file.read_text()
+
+                if ".allowedOrigins(" not in content and "@CrossOrigin" not in content:
+                    continue
+
+                if frontend_url in content:
+                    self.logger.info(f"CORS already configured in {java_file.name}")
+                    files_updated += 1
+                    continue
+
+                updated = content
+
+                # Handle .allowedOrigins("url1", "url2") pattern
+                pattern = r'(\.allowedOrigins\()([^)]+)(\))'
+                match = re.search(pattern, updated)
+                if match:
+                    origins_str = match.group(2).rstrip()
+                    new_origins = f'{origins_str}, "{frontend_url}"'
+                    updated = updated[:match.start(2)] + new_origins + updated[match.end(2):]
+
+                # Handle @CrossOrigin(origins = {"url1", "url2"}) pattern
+                pattern = r'(@CrossOrigin\(origins\s*=\s*\{)([^}]+)(\})'
+                match = re.search(pattern, updated)
+                if match:
+                    origins_str = match.group(2).rstrip()
+                    new_origins = f'{origins_str}, "{frontend_url}"'
+                    updated = updated[:match.start(2)] + new_origins + updated[match.end(2):]
+
+                # Handle @CrossOrigin(origins = "url") single origin pattern
+                pattern = r'(@CrossOrigin\(origins\s*=\s*)"([^"]+)"'
+                match = re.search(pattern, updated)
+                if match and "{" not in match.group(0):
+                    original_origin = match.group(2)
+                    replacement = f'{match.group(1)}{{"{original_origin}", "{frontend_url}"}}'
+                    updated = updated[:match.start()] + replacement + updated[match.end():]
+
+                if updated != content:
+                    java_file.write_text(updated)
+                    files_updated += 1
+                    self.logger.info(f"Updated CORS in {java_file.name}")
+
+            return {"success": True, "files_updated": files_updated}
+
+        except Exception as e:
+            self.logger.error(f"Error updating CORS configuration: {str(e)}")
+            return {"success": False, "error": str(e)}
 
     async def _run_command(self, command: str) -> Dict[str, Any]:
         """Run shell command asynchronously."""
