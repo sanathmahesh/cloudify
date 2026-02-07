@@ -214,17 +214,21 @@ class BaseAgent(ABC):
                 else EventType.AGENT_FAILED
             )
 
-            await self.event_bus.publish(Event(
-                event_type=event_type,
-                source_agent=self.name,
-                data={
+            event_data = {
                     "agent": self.name,
                     "status": result.status.value,
                     "data": result.data,
                     "execution_time": execution_time,
                     "models_used": result.models_used,
                     "tools_called": result.tools_called,
-                },
+            }
+            if result.errors:
+                event_data["error"] = "; ".join(result.errors)
+
+            await self.event_bus.publish(Event(
+                event_type=event_type,
+                source_agent=self.name,
+                data=event_data,
             ))
 
             self.logger.info(
