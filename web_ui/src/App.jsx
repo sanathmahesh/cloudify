@@ -1,11 +1,38 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-const sampleArgs = `--source-path /path/to/app \\
---gcp-project your-project-id \\
---region us-central1 \\
+const sampleArgs = `--source-path /Users/aritraraychaudhuri/Downloads/BasicApp \
+--gcp-project cloudify-486706 \
 --mode automated`;
+
+const AGENTS = [
+  { key: "CodeAnalyzer", label: "Code Analysis" },
+  { key: "Infrastructure", label: "Infrastructure" },
+  { key: "DatabaseMigration", label: "Database Migration" },
+  { key: "BackendDeployment", label: "Backend Deploy" },
+  { key: "FrontendDeployment", label: "Frontend Deploy" },
+];
+
+function initAgentState() {
+  const state = {};
+  for (const a of AGENTS) {
+    state[a.key] = { status: "pending", time: null };
+  }
+  return state;
+}
+
+// Parse STDERR log lines emitted by base_agent.py
+const RE_STARTED = /Agent\.(\w+)\s+-\s+INFO\s+-\s+Starting\s+/;
+const RE_COMPLETED = /Completed\s+(\w+)\s+-\s+Status:\s+(\w+)\s+\(([0-9.]+)s\)/;
+
+function parseAgentEvent(line) {
+  let m = line.match(RE_STARTED);
+  if (m) return { agent: m[1], type: "started" };
+  m = line.match(RE_COMPLETED);
+  if (m) return { agent: m[1], type: "completed", agentStatus: m[2], time: parseFloat(m[3]) };
+  return null;
+}
 
 export default function App() {
   const [args, setArgs] = useState(sampleArgs);
@@ -13,9 +40,18 @@ export default function App() {
   const [migrationId, setMigrationId] = useState(null);
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState(null);
+  const [agents, setAgents] = useState(initAgentState);
   const logEndRef = useRef(null);
+  const eventSourceRef = useRef(null);
 
-  const canRun = useMemo(() => status !== "running", [status]);
+  const canRun = useMemo(() => status !== "running" && status !== "starting", [status]);
+  const canCancel = useMemo(() => status === "running", [status]);
+
+  const completedCount = useMemo(
+    () => AGENTS.filter((a) => agents[a.key].status === "completed").length,
+    [agents]
+  );
+  const progressPct = (completedCount / AGENTS.length) * 100;
 
   const appendLog = (line) => {
     setLogs((prev) => {
@@ -24,16 +60,61 @@ export default function App() {
     });
   };
 
+  const handleLogLine = useCallback((line) => {
+    // Strip [STDERR] / [STDOUT] prefix for cleaner display
+    const cleaned = line.replace(/^\[(STDERR|STDOUT)\]\s*/, "");
+    appendLog(cleaned);
+
+    const evt = parseAgentEvent(line);
+    if (!evt) return;
+
+    setAgents((prev) => {
+      const cur = prev[evt.agent];
+      if (!cur) return prev;
+
+      if (evt.type === "started") {
+        return { ...prev, [evt.agent]: { ...cur, status: "running" } };
+      }
+      if (evt.type === "completed") {
+        return {
+          ...prev,
+          [evt.agent]: {
+            status: evt.agentStatus === "success" ? "completed" : "failed",
+            time: evt.time,
+          },
+        };
+      }
+      return prev;
+    });
+  }, []);
+
+  const cancelMigration = async () => {
+    if (!migrationId) return;
+    try {
+      await fetch(`${API_BASE}/api/migrations/${migrationId}/cancel`, {
+        method: "POST",
+      });
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setStatus("cancelled");
+    } catch (err) {
+      setError("Failed to cancel: " + err.message);
+    }
+  };
+
   const startMigration = async () => {
     setError(null);
     setLogs([]);
+    setAgents(initAgentState());
     setStatus("starting");
 
     try {
       const response = await fetch(`${API_BASE}/api/migrations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ args })
+        body: JSON.stringify({ args }),
       });
 
       if (!response.ok) {
@@ -48,21 +129,24 @@ export default function App() {
       const eventSource = new EventSource(
         `${API_BASE}/api/migrations/${data.id}/stream`
       );
+      eventSourceRef.current = eventSource;
 
       eventSource.onmessage = (event) => {
-        appendLog(event.data);
+        handleLogLine(event.data);
         requestAnimationFrame(() => {
           logEndRef.current?.scrollIntoView({ behavior: "smooth" });
         });
 
         if (event.data === "[SYSTEM] EOF") {
           eventSource.close();
+          eventSourceRef.current = null;
           setStatus("completed");
         }
       };
 
       eventSource.onerror = () => {
         eventSource.close();
+        eventSourceRef.current = null;
         setStatus("error");
         setError("Log stream disconnected.");
       };
@@ -76,11 +160,11 @@ export default function App() {
     <div className="app">
       <div className="hero">
         <div>
-          <p className="eyebrow">Cloudify Console</p>
-          <h1>Run migrations. Watch logs live.</h1>
+          <p className="eyebrow">Cloud Migration Console</p>
+          <h1>Cloudify</h1>
           <p className="subhead">
-            Paste CLI arguments below, kick off the migration, and stream logs in
-            real time.
+            Powered by Dedalus SDK with multi-model handoffs and tool calling.
+            Run migrations and stream logs in real time.
           </p>
         </div>
         <div className="status-card">
@@ -95,13 +179,20 @@ export default function App() {
       <div className="panel">
         <div className="panel-header">
           <h2>Migration Request</h2>
-          <button
-            className="primary"
-            onClick={startMigration}
-            disabled={!canRun}
-          >
-            {status === "running" ? "Running..." : "Run Migration"}
-          </button>
+          <div className="button-group">
+            {canCancel && (
+              <button className="cancel" onClick={cancelMigration}>
+                Cancel
+              </button>
+            )}
+            <button
+              className="primary"
+              onClick={startMigration}
+              disabled={!canRun}
+            >
+              {status === "running" ? "Running..." : "Run Migration"}
+            </button>
+          </div>
         </div>
         <textarea
           value={args}
@@ -111,10 +202,49 @@ export default function App() {
         />
         <p className="hint">
           Tip: This content is passed to `python migration_orchestrator.py
-          migrate` on the server.
+          migrate` on the server. Uses Dedalus SDK for multi-model handoffs.
         </p>
         {error && <div className="error">{error}</div>}
       </div>
+
+      {/* Agent Progress Panel */}
+      {status !== "idle" && (
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Agent Progress</h2>
+            <span className="mono">
+              {completedCount}/{AGENTS.length} agents
+            </span>
+          </div>
+
+          <div className="progress-bar-track">
+            <div
+              className="progress-bar-fill"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+
+          <div className="agent-list">
+            {AGENTS.map((a) => {
+              const info = agents[a.key];
+              return (
+                <div className={`agent-row agent-${info.status}`} key={a.key}>
+                  <span className="agent-icon">
+                    {info.status === "completed" && "\u2713"}
+                    {info.status === "failed" && "\u2717"}
+                    {info.status === "running" && "\u25CB"}
+                    {info.status === "pending" && "\u2022"}
+                  </span>
+                  <span className="agent-name">{a.label}</span>
+                  <span className="agent-time">
+                    {info.time != null ? `${info.time.toFixed(1)}s` : info.status === "running" ? "running..." : ""}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="panel logs">
         <div className="panel-header">
@@ -137,7 +267,7 @@ export default function App() {
       </div>
 
       <footer>
-        <span>Output endpoints are determined by your Cloudify config.</span>
+        <span>Cloudify v2.0.0 — Dedalus SDK + Multi-Model Handoffs</span>
         <span className="mono">Backend: {API_BASE}</span>
       </footer>
     </div>

@@ -1,6 +1,7 @@
 import asyncio
 import shlex
 import re
+import signal
 import sys
 import uuid
 from collections import deque
@@ -28,13 +29,13 @@ class MigrationProcess:
     returncode: Optional[int] = None
 
 
-app = FastAPI(title="Cloudify Web Backend")
+app = FastAPI(title="Cloudify Web Backend — Powered by Dedalus SDK")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"] ,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -62,16 +63,15 @@ async def _run_migration(migration_id: str, args: str) -> None:
     migration = _migrations[migration_id]
     cmd = [sys.executable, "migration_orchestrator.py", "migrate"]
     if args.strip():
-        normalized = re.sub(r"\\\\\\s*\\n", " ", args)
-        normalized = re.sub(r"\\s*\\n\\s*", " ", normalized)
-        normalized = normalized.replace("\\n", " ")
-        tokens = [t.strip() for t in shlex.split(normalized) if t != "\\"]
-        tokens = [t for t in tokens if t]
+        # Normalize backslash-newline continuations and newlines into spaces
+        normalized = re.sub(r"\\\s*\n", " ", args)
+        normalized = re.sub(r"\s*\n\s*", " ", normalized)
+        tokens = [t.strip() for t in shlex.split(normalized) if t.strip()]
 
         # If user pasted the full command, drop the leading parts up to "migrate".
         if "migrate" in tokens:
             migrate_index = tokens.index("migrate")
-            tokens = tokens[migrate_index + 1 :]
+            tokens = tokens[migrate_index + 1:]
 
         cmd.extend(tokens)
         await migration.queue.put(f"[SYSTEM] Parsed args: {tokens}")
@@ -120,6 +120,26 @@ async def migration_status(migration_id: str) -> dict:
         "returncode": migration.returncode,
         "running": migration.returncode is None,
     }
+
+
+@app.post("/api/migrations/{migration_id}/cancel")
+async def cancel_migration(migration_id: str) -> dict:
+    migration = _migrations.get(migration_id)
+    if not migration:
+        raise HTTPException(status_code=404, detail="Migration not found")
+
+    if migration.returncode is not None:
+        return {"cancelled": False, "reason": "Migration already finished"}
+
+    if migration.process is None:
+        return {"cancelled": False, "reason": "Process not started yet"}
+
+    try:
+        migration.process.send_signal(signal.SIGTERM)
+        await migration.queue.put("[SYSTEM] Migration cancelled by user")
+        return {"cancelled": True}
+    except ProcessLookupError:
+        return {"cancelled": False, "reason": "Process already exited"}
 
 
 @app.get("/api/migrations/{migration_id}/stream")

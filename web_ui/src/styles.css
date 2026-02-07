@@ -98,10 +98,17 @@ h1 {
   border-color: rgba(201, 163, 255, 0.4);
 }
 
-.status-error {
+.status-error,
+.status-cancelled {
   background: rgba(255, 107, 107, 0.2);
   color: var(--danger);
   border-color: rgba(255, 107, 107, 0.4);
+}
+
+.status-completed {
+  background: rgba(68, 209, 159, 0.2);
+  color: #44d19f;
+  border-color: rgba(68, 209, 159, 0.4);
 }
 
 .status-id {
@@ -150,6 +157,12 @@ textarea:focus {
   border-color: var(--accent);
 }
 
+.button-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .primary {
   background: linear-gradient(135deg, var(--accent), #6a4cff);
   color: #0b0f14;
@@ -165,6 +178,111 @@ textarea:focus {
   opacity: 0.6;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.cancel {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancel:hover {
+  background: rgba(255, 107, 107, 0.15);
+}
+
+/* Agent progress panel */
+.progress-bar-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), #44d19f);
+  transition: width 0.4s ease;
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.agent-row.agent-running {
+  background: rgba(201, 163, 255, 0.08);
+}
+
+.agent-row.agent-completed {
+  background: rgba(68, 209, 159, 0.08);
+}
+
+.agent-row.agent-failed {
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.agent-icon {
+  width: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.agent-running .agent-icon {
+  color: var(--accent-2);
+  animation: pulse 1.2s infinite;
+}
+
+.agent-completed .agent-icon {
+  color: #44d19f;
+}
+
+.agent-failed .agent-icon {
+  color: var(--danger);
+}
+
+.agent-pending .agent-icon {
+  color: var(--muted);
+  opacity: 0.4;
+}
+
+.agent-name {
+  flex: 1;
+}
+
+.agent-pending .agent-name {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+.agent-time {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 70px;
+  text-align: right;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .hint {
