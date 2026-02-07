@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-02-07T14:06:30.542352Z",
+  "summary": {},
+  "tool_trace_summary": {
+    "total_calls": 0,
+    "error_count": 0,
+    "tools": {}
+  },
+  "tool_trace": [],
+  "errors": [
+    "Error code: 500 - {'detail': {'error': {'message': 'An unexpected error occurred processing your request', 'type': 'api_error', 'hint': 'If this persists, contact support@dedaluslabs.ai'}}}"
+  ],
+  "warnings": [],
+  "config": {
+    "source": {
+      "path": "../BasicApp",
+      "backend": {
+        "type": "spring-boot",
+        "path": "backend",
+        "build_tool": "maven",
+        "java_version": "21"
+      },
+      "frontend": {
+        "type": "react",
+        "path": "frontend",
+        "build_tool": "vite",
+        "node_version": "20"
+      },
+      "database": {
+        "type": "h2",
+        "mode": "in-memory",
+        "data_file": null
+      }
+    },
+    "gcp": {
+      "project_id": "cloudify-486706",
+      "region": "us-central1",
+      "zone": "us-central1-a",
+      "service_account_key": null,
+      "backend": {
+        "service_name": "expense-calculator-backend",
+        "container_port": 8080,
+        "memory": "1Gi",
+        "cpu": "1",
+        "min_instances": 0,
+        "max_instances": 10,
+        "timeout": 300,
+        "env_vars": {
+          "SPRING_PROFILES_ACTIVE": "prod"
+        },
+        "allow_unauthenticated": true
+      },
+      "frontend": {
+        "site_name": "expense-calculator-frontend",
+        "custom_domain": null
+      },
+      "database": {
+        "strategy": "keep-h2",
+        "cloud_sql": {
+          "instance_name": "expense-calculator-db",
+          "database_name": "expense_calculator",
+          "tier": "db-f1-micro",
+          "database_version": "POSTGRES_15",
+          "root_password": null
+        }
+      },
+      "artifact_registry": {
+        "repository_name": "cloudify-apps",
+        "format": "docker",
+        "description": "Docker images for migrated applications"
+      }
+    },
+    "migration": {
+      "mode": "interactive",
+      "dry_run": false,
+      "verbose": true,
+      "backup_enabled": true,
+      "backup_path": "./backups",
+      "agents": {
+        "max_retries": 3,
+        "timeout": 600,
+        "parallel_execution": true
+      }
+    },
+    "ai": {
+      "model": "claude-opus-4-6",
+      "temperature": 0.3,
+      "max_tokens": 4096,
+      "recommendations_enabled": true
+    },
+    "post_migration": {
+      "health_checks": true,
+      "generate_report": true,
+      "report_path": "./migration_report.md",
+      "show_cost_estimates": true,
+      "open_in_browser": false
+    },
+    "notifications": {
+      "enabled": false,
+      "slack_webhook": null,
+      "email": null
+    }
+  }
+}
