@@ -289,7 +289,7 @@ def display_summary(data: dict):
 @app.command()
 def migrate(
     source_path: Path = typer.Option(
-        "./BasicApp",
+        "../BasicApp",
         "--source-path",
         "-s",
         help="Path to source application directory",

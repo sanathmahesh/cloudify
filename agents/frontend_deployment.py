@@ -37,15 +37,31 @@ class FrontendDeploymentAgent(BaseAgent):
         self.logger.info("Starting frontend deployment")
 
         # Get backend deployment information
-        backend_events = self.event_bus.get_history(EventType.BACKEND_DEPLOYED)
-        if not backend_events:
+        self.logger.info("Waiting for Backend Deployment to complete...")
+        
+        # Max wait time: 10 minutes (600s), checking every 10 seconds
+        max_retries = 60
+        backend_data = None
+        
+        for i in range(max_retries):
+            backend_events = self.event_bus.get_history(EventType.BACKEND_DEPLOYED)
+            if backend_events:
+                backend_data = backend_events[-1].data
+                self.logger.info("Backend deployment detected!")
+                break
+            
+            if i % 6 == 0: # Log every minute
+                self.logger.info(f"Still waiting for backend... ({i*10}s elapsed)")
+            
+            await asyncio.sleep(10)
+
+        if not backend_data:
             return AgentResult(
                 status=AgentStatus.FAILED,
                 data={},
-                errors=["Backend not deployed. Deploy backend first to get API URL."],
+                errors=["Timed out waiting for Backend Deployment (10 minutes)."],
             )
 
-        backend_data = backend_events[-1].data
         backend_url = backend_data.get("service_url")
 
         if not backend_url:
@@ -232,14 +248,23 @@ VITE_BACKEND_URL={backend_url}
         try:
             gcp_config = self.config.get("gcp", {})
             project_id = gcp_config.get("project_id")
+            frontend_config = gcp_config.get("frontend", {})
+            site_name = frontend_config.get("site_name", f"{project_id}")
+
+            # Create or verify Firebase Hosting site exists
+            self.logger.info(f"Setting up Firebase Hosting site: {site_name}")
+            site_result = await self._ensure_hosting_site(project_id, site_name)
+            if not site_result["success"]:
+                self.logger.warning(f"Could not verify/create hosting site: {site_result.get('error')}")
 
             # Check if firebase.json already exists
             firebase_config_file = frontend_path / "firebase.json"
 
             if not firebase_config_file.exists():
-                # Create firebase.json
+                # Create firebase.json with site configuration
                 firebase_config = {
                     "hosting": {
+                        "site": site_name,  # Specify the hosting site
                         "public": "dist",  # Vite default
                         "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
                         "rewrites": [
@@ -270,7 +295,34 @@ VITE_BACKEND_URL={backend_url}
 
                 firebaserc_file.write_text(json.dumps(firebaserc_config, indent=2))
 
-            return {"success": True}
+            return {"success": True, "site_name": site_name}
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _ensure_hosting_site(self, project_id: str, site_name: str) -> Dict[str, Any]:
+        """Ensure Firebase Hosting site exists."""
+        try:
+            # Check if site exists
+            check_cmd = f"firebase hosting:sites:list --project={project_id}"
+            result = await self._run_command(check_cmd)
+
+            if result["returncode"] == 0:
+                # Check if our site is in the list
+                if site_name in result["stdout"]:
+                    self.logger.info(f"Hosting site '{site_name}' already exists")
+                    return {"success": True}
+
+            # Create the hosting site
+            create_cmd = f"firebase hosting:sites:create {site_name} --project={project_id}"
+            create_result = await self._run_command(create_cmd)
+
+            if create_result["returncode"] == 0:
+                self.logger.info(f"Created hosting site: {site_name}")
+                return {"success": True}
+            else:
+                # Site might already exist, or creation failed
+                return {"success": False, "error": create_result.get("stderr", "Could not create site")}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -280,19 +332,27 @@ VITE_BACKEND_URL={backend_url}
         try:
             gcp_config = self.config.get("gcp", {})
             project_id = gcp_config.get("project_id")
+            frontend_config = gcp_config.get("frontend", {})
+            site_name = frontend_config.get("site_name", project_id)
 
-            # Login to Firebase (non-interactive)
-            # Note: This assumes the user is already authenticated with gcloud
-            # which shares credentials with Firebase
+            # Check if Firebase CLI is authenticated
+            self.logger.info("Checking Firebase authentication")
+            auth_check = await self._run_command("firebase projects:list", cwd=frontend_path)
 
-            # Deploy
-            deploy_cmd = f"firebase deploy --only hosting --project={project_id}"
+            if auth_check["returncode"] != 0:
+                return {
+                    "success": False,
+                    "error": "Not authenticated with Firebase CLI. Please run 'firebase login' before running the migration."
+                }
+
+            # Deploy to specific hosting site
+            deploy_cmd = f"firebase deploy --only hosting:{site_name} --project={project_id}"
 
             result = await self._run_command(deploy_cmd, cwd=frontend_path)
 
             if result["returncode"] == 0:
-                # Extract hosting URL
-                hosting_url = f"https://{project_id}.web.app"
+                # Generate hosting URL based on site name
+                hosting_url = f"https://{site_name}.web.app"
 
                 # Try to extract actual URL from output
                 if "Hosting URL:" in result["stdout"]:

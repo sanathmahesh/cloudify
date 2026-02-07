@@ -32,7 +32,7 @@ def config():
             },
         },
         "ai": {
-            "model": "claude-opus-4.6",
+            "model": "claude-opus-4-6",
             "temperature": 0.3,
         },
     }

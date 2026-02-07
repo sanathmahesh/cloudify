@@ -258,7 +258,7 @@ class BaseAgent(ABC):
             Claude's response as string
         """
         try:
-            model = self.config.get("ai", {}).get("model", "claude-opus-4.6")
+            model = self.config.get("ai", {}).get("model", "claude-opus-4-6")
 
             kwargs = {
                 "model": model,

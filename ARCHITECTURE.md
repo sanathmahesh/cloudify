@@ -246,7 +246,7 @@ Format as JSON array.
 """
 
 response = claude.messages.create(
-    model="claude-opus-4.6",
+    model="claude-opus-4-6",
     system=system_prompt,
     messages=[{"role": "user", "content": user_prompt}],
     max_tokens=2000,

@@ -162,17 +162,21 @@ class InfrastructureAgent(BaseAgent):
                     return {"success": False, "error": result.get("stderr")}
             else:
                 # Use Application Default Credentials
-                self.logger.info("Using Application Default Credentials")
-                result = await self._run_command("gcloud auth application-default login --no-launch-browser")
-                if result["returncode"] == 0:
-                    return {"success": True}
-                else:
-                    # Check if already authenticated
-                    check_result = await self._run_command("gcloud auth list")
-                    if check_result["returncode"] == 0 and check_result["stdout"]:
-                        self.logger.info("Already authenticated")
+                self.logger.info("Checking for existing authentication")
+
+                # Check if already authenticated FIRST
+                check_result = await self._run_command("gcloud auth list")
+                if check_result["returncode"] == 0 and check_result["stdout"]:
+                    # Check for active account
+                    if "*" in check_result["stdout"] or "ACTIVE" in check_result["stdout"]:
+                        self.logger.info("Already authenticated with gcloud")
                         return {"success": True}
-                    return {"success": False, "error": "Authentication required"}
+
+                # If not authenticated, fail with clear instructions
+                return {
+                    "success": False,
+                    "error": "Not authenticated with gcloud. Please run 'gcloud auth login' or 'gcloud auth application-default login' before running the migration."
+                }
 
         except Exception as e:
             return {"success": False, "error": str(e)}

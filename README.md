@@ -153,7 +153,7 @@ source:
   path: "./BasicApp"  # Path to your application
 
 gcp:
-  project_id: "my-hackathon-project"
+  project_id: "cloudify-486706"
   region: "us-central1"
 
 migration:
@@ -164,7 +164,7 @@ migration:
 
 ```bash
 python migration_orchestrator.py migrate \
-  --source-path ./BasicApp \
+  --source-path /Users/anmolsahu2k/Stuff/Create/TartanHacks/BasicApp \
   --gcp-project cloudify-486706 \
   --region us-central1
 ```
@@ -239,7 +239,7 @@ migration:
 
 # AI Configuration
 ai:
-  model: "claude-opus-4.6"
+  model: "claude-opus-4-6"
   temperature: 0.3
 ```
 
@@ -255,8 +255,8 @@ git clone https://github.com/sanathmahesh/BasicApp.git
 
 # 2. Run migration with all defaults
 python migration_orchestrator.py migrate \
-  --source-path ./BasicApp \
-  --gcp-project my-gcp-project \
+  --source-path ../BasicApp \
+  --gcp-project cloudify-486706 \
   --mode automated
 
 # Output:

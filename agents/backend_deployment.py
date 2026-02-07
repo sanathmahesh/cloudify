@@ -231,7 +231,9 @@ Provide ONLY the Dockerfile content, no explanations.
     ) -> Dict[str, Any]:
         """Build Docker image."""
         try:
-            build_cmd = f"docker build -t {image_tag} {backend_path}"
+            # Build for linux/amd64 platform (required by Cloud Run)
+            # This is especially important when building on ARM Macs (M1/M2/M3)
+            build_cmd = f"docker build --platform linux/amd64 -t {image_tag} {backend_path}"
 
             self.logger.info(f"Building Docker image: {build_cmd}")
 

@@ -4,7 +4,7 @@
 # Source Application Configuration
 source:
   # Path to the application repository (relative or absolute)
-  path: "./BasicApp"
+  path: "../BasicApp"
 
   # Application type detection (auto-detect or specify)
   backend:
@@ -28,7 +28,7 @@ source:
 # Google Cloud Platform Configuration
 gcp:
   # GCP Project Settings
-  project_id: "my-hackathon-project"
+  project_id: "cloudify-486706"
   region: "us-central1"
   zone: "us-central1-a"
 
@@ -107,7 +107,7 @@ migration:
 # AI Agent Configuration
 ai:
   # Claude API model to use
-  model: "claude-opus-4.6"  # claude-opus-4.6, claude-sonnet-4.5, claude-haiku-4.5
+  model: "claude-opus-4-6"  # claude-opus-4-6, claude-sonnet-4.5, claude-haiku-4.5
 
   # Temperature for AI decision-making (0.0-1.0)
   temperature: 0.3
