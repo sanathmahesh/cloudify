@@ -19,7 +19,7 @@ from typing import Any
 # Shell helpers (not exposed as tools – used internally by tools)
 # ---------------------------------------------------------------------------
 
-async def _run_command(command: str, cwd: str | None = None) -> dict[str, Any]:
+async def _run_command(command: str, cwd: str | None = None, timeout: int = 300) -> dict[str, Any]:
     """Run a shell command asynchronously and return result dict."""
     try:
         process = await asyncio.create_subprocess_shell(
@@ -28,12 +28,15 @@ async def _run_command(command: str, cwd: str | None = None) -> dict[str, Any]:
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
         )
-        stdout, stderr = await process.communicate()
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
         return {
             "returncode": process.returncode,
             "stdout": stdout.decode() if stdout else "",
             "stderr": stderr.decode() if stderr else "",
         }
+    except asyncio.TimeoutError:
+        process.kill()
+        return {"returncode": 1, "stdout": "", "stderr": f"Command timed out after {timeout}s: {command}"}
     except Exception as e:
         return {"returncode": 1, "stdout": "", "stderr": str(e)}
 
@@ -760,11 +763,11 @@ async def deploy_to_firebase(frontend_path: str, project_id: str, site_name: str
     # Write .firebaserc
     (fp / ".firebaserc").write_text(json.dumps({"projects": {"default": project_id}}, indent=2))
 
-    # Ensure hosting site exists
-    await _run_command(f"firebase hosting:sites:create {site_name} --project={project_id}", cwd=str(fp))
+    # Ensure hosting site exists (short timeout — may already exist, which is fine)
+    await _run_command(f"firebase hosting:sites:create {site_name} --project={project_id} --non-interactive", cwd=str(fp), timeout=60)
 
     # Deploy
-    r = await _run_command(f"firebase deploy --only hosting:{site_name} --project={project_id}", cwd=str(fp))
+    r = await _run_command(f"firebase deploy --only hosting:{site_name} --project={project_id} --non-interactive --force", cwd=str(fp))
     if r["returncode"] != 0:
         error = r["stderr"] or r["stdout"]
         return json.dumps({"success": False, "error": error[:500]})

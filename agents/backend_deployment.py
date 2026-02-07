@@ -217,7 +217,9 @@ Requirements:
 3. Optimize layer caching
 4. Non-root user for security
 5. Health check endpoint
-6. Expose port 8080
+6. The application MUST listen on the port specified by the PORT environment variable (default 8080). Use -Dserver.port=${{PORT:-8080}} in the ENTRYPOINT.
+7. If using Spring Boot layered JARs, the correct main class is org.springframework.boot.loader.launch.JarLauncher (NOT ProperLauncherApplication or any other variant).
+8. Prefer using -jar app.jar over layered extraction for simplicity.
 
 Return ONLY valid Dockerfile instructions starting with FROM. Do not include any explanations, summaries, or markdown formatting."""
 
