@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Inter, Montserrat } from "next/font/google";
+import { Space_Grotesk, Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  style: "italic",
-  variable: "--font-instrument-serif",
+const spaceGrotesk = Space_Grotesk({
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
 
@@ -32,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${instrumentSerif.variable} ${inter.variable} ${montserrat.variable}`}>
+    <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable} ${montserrat.variable}`}>
       <body className="font-sans bg-bg-primary text-text-secondary antialiased">
         {children}
       </body>

@@ -18,18 +18,40 @@ const footerLinks = {
 
 export default function Footer() {
   return (
-    <footer className="py-16 border-t border-border-subtle">
-      <div className="max-w-7xl mx-auto px-6">
+    <footer className="pt-16 pb-10 relative overflow-hidden">
+      <div className="h-px w-full bg-gradient-to-r from-accent-purple/0 via-accent-purple/50 to-accent-green/0" />
+      <div className="max-w-7xl mx-auto px-6 pt-12">
         <div className="grid md:grid-cols-4 gap-12">
           {/* Brand */}
           <div>
-            <span className="text-text-primary font-serif text-2xl">
+            <span className="text-text-primary font-serif text-3xl">
               Cloudify
             </span>
             <p className="text-text-muted text-sm mt-4 leading-relaxed">
-              AI-powered cloud migration for Spring Boot + React apps. Built
-              with Dedalus AI &amp; Claude.
+              Migrate Spring Boot + React apps to GCP in one command. Built with
+              Dedalus AI &amp; Claude.
             </p>
+            <div className="mt-6">
+              <p className="text-xs uppercase tracking-wider text-text-muted">
+                Newsletter
+              </p>
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                <input
+                  type="email"
+                  placeholder="you@company.com"
+                  className="flex-1 bg-bg-primary/60 border border-border-subtle rounded-full px-4 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-accent-purple/60"
+                />
+                <a
+                  href="https://github.com/sanathmahesh/cloudify"
+                  className="bg-accent-purple hover:bg-accent-purple-light text-white rounded-full px-5 py-2 text-sm font-medium transition-colors text-center"
+                >
+                  Notify me
+                </a>
+              </div>
+              <p className="text-xs text-text-muted mt-2">
+                Updates delivered via GitHub releases.
+              </p>
+            </div>
           </div>
 
           {/* Link columns */}
@@ -54,13 +76,16 @@ export default function Footer() {
           ))}
         </div>
 
-        <div className="mt-16 pt-8 border-t border-border-subtle flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="mt-16">
+          <div className="h-px w-full bg-gradient-to-r from-accent-purple/0 via-accent-purple/50 to-accent-green/0" />
+          <div className="pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-text-muted text-sm">
             Built with love for TartanHacks 2026
           </p>
           <p className="text-text-muted text-sm">
             &copy; 2026 Cloudify. All rights reserved.
           </p>
+          </div>
         </div>
       </div>
     </footer>

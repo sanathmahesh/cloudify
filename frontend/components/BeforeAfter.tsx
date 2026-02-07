@@ -2,6 +2,7 @@
 
 import { motion, useInView } from "framer-motion";
 import { useRef } from "react";
+import type { CSSProperties } from "react";
 
 const beforeCommands = [
   "# Manual cloud migration steps...",
@@ -49,7 +50,7 @@ export default function BeforeAfter() {
           <h2 className="font-serif text-[clamp(2rem,4vw,3rem)] text-text-primary mt-4 mb-4">
             Before &amp; After <span className="gradient-text">Cloudify</span>
           </h2>
-          <p className="text-text-secondary max-w-xl mx-auto" style={{ textWrap: "balance" } as React.CSSProperties}>
+          <p className="text-text-secondary max-w-xl mx-auto" style={{ textWrap: "balance" } as CSSProperties}>
             Twenty manual commands become one. Hours become minutes.
           </p>
         </div>

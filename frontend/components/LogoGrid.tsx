@@ -23,7 +23,7 @@ export default function LogoGrid() {
             {logos.map((logo) => (
               <div
                 key={logo.name}
-                className="flex items-center justify-center h-10 opacity-40 hover:opacity-100 transition-opacity duration-300"
+                className="flex items-center justify-center h-10 opacity-40 hover:opacity-100 hover:scale-110 transition-all duration-300"
               >
                 <Image
                   src={logo.file}

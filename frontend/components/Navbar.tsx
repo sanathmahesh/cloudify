@@ -25,12 +25,12 @@ export default function Navbar() {
     <>
       {/* Scroll progress bar */}
       <motion.div
-        className="fixed top-0 left-0 right-0 h-[2px] scroll-progress z-[60] origin-left"
+        className="fixed top-0 left-0 right-0 h-[2px] scroll-progress z-[80] origin-left"
         style={{ scaleX }}
       />
 
       <nav
-        className={`fixed top-[2px] left-0 right-0 z-50 transition-all duration-300 ${
+        className={`fixed top-[40px] left-0 right-0 z-[60] transition-all duration-300 ${
           scrolled
             ? "bg-bg-primary/80 backdrop-blur-lg border-b border-border-subtle"
             : "bg-transparent"

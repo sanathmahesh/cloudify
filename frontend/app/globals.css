@@ -12,7 +12,7 @@
   --color-text-secondary: #999999;
   --color-text-muted: #666666;
   --font-sans: var(--font-inter);
-  --font-serif: var(--font-instrument-serif);
+  --font-serif: var(--font-space-grotesk);
 }
 
 body {
@@ -139,13 +139,64 @@ html {
 
 @keyframes cloud-pulse {
   0%, 100% {
-    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.3));
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.2));
+    opacity: 0.85;
   }
   50% {
-    filter: drop-shadow(0 0 40px rgba(255, 255, 255, 0.6));
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.35));
+    opacity: 1;
   }
 }
 
 .animate-cloud-pulse {
-  animation: cloud-pulse 4s ease-in-out infinite;
+  animation: cloud-pulse 5s ease-in-out infinite;
+}
+
+@keyframes logo-orbit-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes logo-dash {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -200; }
+}
+
+@keyframes logo-flicker {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.logo-orbit-rotate {
+  animation: logo-orbit-rotate 104s linear infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.logo-orbit-reverse {
+  animation: logo-orbit-rotate 140s linear infinite reverse;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.logo-dash {
+  animation: logo-dash 14s linear infinite;
+}
+
+.logo-flicker {
+  animation: logo-flicker 3.5s ease-in-out infinite;
+}
+
+@keyframes data-flow {
+  0% { stroke-dashoffset: 180; opacity: 0.2; }
+  40% { opacity: 0.9; }
+  100% { stroke-dashoffset: 0; opacity: 0.3; }
+}
+
+.data-stream {
+  animation: data-flow 6s linear infinite;
+}
+
+.data-stream-delay {
+  animation-delay: 1.2s;
 }

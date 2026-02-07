@@ -64,3 +64,9 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+frontend/.env*.local

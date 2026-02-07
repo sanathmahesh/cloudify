@@ -1,41 +1,58 @@
 "use client";
 
 import { motion, useInView } from "framer-motion";
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
+import type { CSSProperties } from "react";
 
-const terminalLines = [
-  { text: "$ cloudify migrate --project my-app", type: "command" as const, delay: 0 },
-  { text: "", type: "blank" as const, delay: 1200 },
-  { text: "  Cloudify v1.0.0 — AI-Powered Cloud Migration", type: "header" as const, delay: 1400 },
-  { text: "", type: "blank" as const, delay: 1600 },
-  { text: "  [1/5] Analyzing codebase...", type: "step" as const, delay: 1800 },
-  { text: "        ✓ Detected Spring Boot 3.2 backend", type: "success" as const, delay: 2400 },
-  { text: "        ✓ Detected React 18 frontend (Vite)", type: "success" as const, delay: 2800 },
-  { text: "        ✓ Detected H2 database → Cloud SQL", type: "success" as const, delay: 3200 },
-  { text: "", type: "blank" as const, delay: 3400 },
-  { text: "  [2/5] Provisioning GCP infrastructure...", type: "step" as const, delay: 3600 },
-  { text: "        ✓ Cloud Run service created", type: "success" as const, delay: 4200 },
-  { text: "        ✓ Artifact Registry configured", type: "success" as const, delay: 4600 },
-  { text: "        ✓ Firebase Hosting initialized", type: "success" as const, delay: 5000 },
-  { text: "", type: "blank" as const, delay: 5200 },
-  { text: "  [3/5] Migrating database...", type: "step" as const, delay: 5400 },
-  { text: "        ✓ Cloud SQL instance provisioned", type: "success" as const, delay: 6000 },
-  { text: "        ✓ Schema migrated (12 tables)", type: "success" as const, delay: 6400 },
-  { text: "", type: "blank" as const, delay: 6600 },
-  { text: "  [4/5] Building & deploying backend...", type: "step" as const, delay: 6800 },
-  { text: "        ✓ Dockerfile generated (multi-stage)", type: "success" as const, delay: 7400 },
-  { text: "        ✓ Image built & pushed", type: "success" as const, delay: 7800 },
-  { text: "        ✓ Deployed to Cloud Run", type: "success" as const, delay: 8200 },
-  { text: "", type: "blank" as const, delay: 8400 },
-  { text: "  [5/5] Deploying frontend...", type: "step" as const, delay: 8600 },
-  { text: "        ✓ API endpoints updated", type: "success" as const, delay: 9000 },
-  { text: "        ✓ Production build complete", type: "success" as const, delay: 9400 },
-  { text: "        ✓ Deployed to Firebase Hosting", type: "success" as const, delay: 9800 },
-  { text: "", type: "blank" as const, delay: 10000 },
-  { text: "  ══════════════════════════════════════════", type: "divider" as const, delay: 10200 },
-  { text: "  ✅ Migration complete in 1m 47s", type: "final" as const, delay: 10400 },
-  { text: "  🌐 https://my-app-abc123.web.app", type: "url" as const, delay: 10800 },
-  { text: "  ══════════════════════════════════════════", type: "divider" as const, delay: 11000 },
+type TerminalLine =
+  | { type: "command"; text: string }
+  | { type: "blank"; text?: string; delay: number }
+  | { type: "header"; text: string; delay: number }
+  | { type: "step"; text: string; delay: number }
+  | { type: "success"; text: string; delay: number }
+  | { type: "divider"; text: string; delay: number }
+  | { type: "final"; text: string; delay: number }
+  | { type: "url"; text: string; delay: number }
+  | { type: "progress"; delay: number; duration?: number };
+
+const terminalLines: TerminalLine[] = [
+  { text: "$ cloudify migrate --project my-app", type: "command" },
+  { text: "", type: "blank", delay: 200 },
+  { text: "  Cloudify v1.0.0 — AI-Powered Cloud Migration", type: "header", delay: 400 },
+  { text: "", type: "blank", delay: 700 },
+  { text: "  [1/5] Analyzing codebase...", type: "step", delay: 900 },
+  { type: "progress", delay: 1100, duration: 1.2 },
+  { text: "        ✓ Detected Spring Boot 3.2 backend", type: "success", delay: 2300 },
+  { text: "        ✓ Detected React 18 frontend (Vite)", type: "success", delay: 2600 },
+  { text: "        ✓ Detected H2 database → Cloud SQL", type: "success", delay: 2900 },
+  { text: "", type: "blank", delay: 3100 },
+  { text: "  [2/5] Provisioning GCP infrastructure...", type: "step", delay: 3300 },
+  { type: "progress", delay: 3500, duration: 1.2 },
+  { text: "        ✓ Cloud Run service created", type: "success", delay: 4800 },
+  { text: "        ✓ Artifact Registry configured", type: "success", delay: 5100 },
+  { text: "        ✓ Firebase Hosting initialized", type: "success", delay: 5400 },
+  { text: "", type: "blank", delay: 5600 },
+  { text: "  [3/5] Migrating database...", type: "step", delay: 5800 },
+  { type: "progress", delay: 6000, duration: 1.1 },
+  { text: "        ✓ Cloud SQL instance provisioned", type: "success", delay: 7200 },
+  { text: "        ✓ Schema migrated (12 tables)", type: "success", delay: 7500 },
+  { text: "", type: "blank", delay: 7700 },
+  { text: "  [4/5] Building & deploying backend...", type: "step", delay: 7900 },
+  { type: "progress", delay: 8100, duration: 1.2 },
+  { text: "        ✓ Dockerfile generated (multi-stage)", type: "success", delay: 9400 },
+  { text: "        ✓ Image built & pushed", type: "success", delay: 9700 },
+  { text: "        ✓ Deployed to Cloud Run", type: "success", delay: 10000 },
+  { text: "", type: "blank", delay: 10200 },
+  { text: "  [5/5] Deploying frontend...", type: "step", delay: 10400 },
+  { type: "progress", delay: 10600, duration: 1.2 },
+  { text: "        ✓ API endpoints updated", type: "success", delay: 11900 },
+  { text: "        ✓ Production build complete", type: "success", delay: 12200 },
+  { text: "        ✓ Deployed to Firebase Hosting", type: "success", delay: 12500 },
+  { text: "", type: "blank", delay: 12700 },
+  { text: "  ══════════════════════════════════════════", type: "divider", delay: 12900 },
+  { text: "  ✅ Migration complete in 1m 47s", type: "final", delay: 13100 },
+  { text: "  🌐 https://my-app-abc123.web.app", type: "url", delay: 13400 },
+  { text: "  ══════════════════════════════════════════", type: "divider", delay: 13600 },
 ];
 
 function getLineColor(type: string) {
@@ -57,36 +74,42 @@ export default function TerminalDemo() {
   const [visibleLines, setVisibleLines] = useState(0);
   const [typedCommand, setTypedCommand] = useState("");
   const [isTyping, setIsTyping] = useState(true);
-  const command = terminalLines[0].text;
-
-  const typeCommand = useCallback(() => {
-    let i = 0;
-    setIsTyping(true);
-    const interval = setInterval(() => {
-      i++;
-      setTypedCommand(command.slice(0, i));
-      if (i >= command.length) {
-        clearInterval(interval);
-        setIsTyping(false);
-        // Start revealing lines after command is typed
-        let lineIndex = 1;
-        const lineInterval = setInterval(() => {
-          lineIndex++;
-          setVisibleLines(lineIndex);
-          if (lineIndex >= terminalLines.length) {
-            clearInterval(lineInterval);
-          }
-        }, 200);
-      }
-    }, 50);
-    return () => clearInterval(interval);
-  }, [command]);
+  const command = terminalLines[0].type === "command" ? terminalLines[0].text : "";
 
   useEffect(() => {
     if (isInView) {
-      typeCommand();
+      let cancelled = false;
+      const timeouts: Array<ReturnType<typeof setTimeout>> = [];
+      setTypedCommand("");
+      setVisibleLines(0);
+      setIsTyping(true);
+
+      let i = 0;
+      const interval = setInterval(() => {
+        i++;
+        setTypedCommand(command.slice(0, i));
+        if (i >= command.length) {
+          clearInterval(interval);
+          setIsTyping(false);
+          terminalLines.slice(1).forEach((line, idx) => {
+            if ("delay" in line) {
+              const timeout = setTimeout(() => {
+                if (cancelled) return;
+                setVisibleLines((prev) => Math.max(prev, idx + 1));
+              }, line.delay);
+              timeouts.push(timeout);
+            }
+          });
+        }
+      }, 45);
+
+      return () => {
+        cancelled = true;
+        clearInterval(interval);
+        timeouts.forEach(clearTimeout);
+      };
     }
-  }, [isInView, typeCommand]);
+  }, [isInView, command]);
 
   return (
     <section className="py-24 relative overflow-hidden">
@@ -101,7 +124,7 @@ export default function TerminalDemo() {
           <h2 className="font-serif text-[clamp(2rem,4vw,3rem)] text-text-primary mt-4 mb-4">
             See It in <span className="gradient-text">Action</span>
           </h2>
-          <p className="text-text-secondary max-w-xl mx-auto" style={{ textWrap: "balance" } as React.CSSProperties}>
+          <p className="text-text-secondary max-w-xl mx-auto" style={{ textWrap: "balance" } as CSSProperties}>
             One command. Five AI agents. Your app in the cloud.
           </p>
         </div>
@@ -131,20 +154,43 @@ export default function TerminalDemo() {
             </div>
 
             {/* Revealed lines */}
-            {terminalLines.slice(1, visibleLines).map((line, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.15 }}
-                className={`${getLineColor(line.type)} ${line.type === "blank" ? "h-4" : ""}`}
-              >
-                {line.text}
-              </motion.div>
-            ))}
+            {terminalLines.slice(1, visibleLines + 1).map((line, i) => {
+              if (line.type === "progress") {
+                return (
+                  <motion.div
+                    key={`progress-${i}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                    className="my-2"
+                  >
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <motion.div
+                        className="h-full bg-gradient-to-r from-accent-purple to-accent-green"
+                        initial={{ width: "0%" }}
+                        animate={{ width: "100%" }}
+                        transition={{ duration: line.duration ?? 1.2, ease: "easeOut" }}
+                      />
+                    </div>
+                  </motion.div>
+                );
+              }
+
+              return (
+                <motion.div
+                  key={`line-${i}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.15 }}
+                  className={`${getLineColor(line.type)} ${line.type === "blank" ? "h-4" : ""}`}
+                >
+                  {"text" in line ? line.text : ""}
+                </motion.div>
+              );
+            })}
 
             {/* Cursor at end */}
-            {!isTyping && visibleLines < terminalLines.length && (
+            {!isTyping && visibleLines < terminalLines.length - 1 && (
               <span className="inline-block w-2 h-4 bg-text-secondary/60 animate-blink" />
             )}
           </div>
