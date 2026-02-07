@@ -1,7 +1,10 @@
 """
-Frontend Deployment Agent
+Frontend Deployment Agent — Powered by Dedalus SDK
 
-Deploys React application to Firebase Hosting.
+Deploys React application to Firebase Hosting using:
+- FAST model (GPT-4.1-mini) for simple build/deploy operations
+- Local tools for npm, build, and Firebase deployment
+- Dedalus tool calling for all deployment steps
 """
 
 import asyncio
@@ -9,50 +12,50 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-from .base_agent import AgentResult, AgentStatus, BaseAgent, Event, EventType
+from .base_agent import AgentResult, AgentStatus, BaseAgent, Event, EventType, ModelRole
+from .dedalus_tools import (
+    FRONTEND_DEPLOYMENT_TOOLS,
+    build_frontend,
+    configure_frontend_env,
+    deploy_to_firebase,
+    install_npm_dependencies,
+)
 
 
 class FrontendDeploymentAgent(BaseAgent):
     """
-    Frontend Deployment agent that deploys React to Firebase Hosting.
+    Frontend Deployment agent powered by Dedalus SDK.
 
-    Responsibilities:
-    - Detect React build configuration
-    - Update API endpoint to Cloud Run URL
-    - Build React production bundle
-    - Deploy to Firebase Hosting
-    - Configure custom domain if provided
+    Uses the FAST model for simple build/deploy operations — this is
+    intentionally a cheaper/faster model because frontend deployment
+    is straightforward compared to code analysis or Dockerfile generation.
     """
 
-    def __init__(self, event_bus, config: Dict[str, Any], claude_api_key: str):
+    def __init__(self, event_bus, config: Dict[str, Any], dedalus_api_key: str):
         super().__init__(
             name="FrontendDeployment",
             event_bus=event_bus,
             config=config,
-            claude_api_key=claude_api_key,
+            dedalus_api_key=dedalus_api_key,
         )
 
     async def _execute_impl(self) -> AgentResult:
-        """Execute frontend deployment."""
-        self.logger.info("Starting frontend deployment")
+        """Execute frontend deployment with Dedalus FAST model and tools."""
+        self.logger.info("Starting frontend deployment with Dedalus FAST model")
 
-        # Get backend deployment information
+        # Wait for backend deployment
         self.logger.info("Waiting for Backend Deployment to complete...")
-        
-        # Max wait time: 10 minutes (600s), checking every 10 seconds
         max_retries = 60
         backend_data = None
-        
+
         for i in range(max_retries):
             backend_events = self.event_bus.get_history(EventType.BACKEND_DEPLOYED)
             if backend_events:
                 backend_data = backend_events[-1].data
                 self.logger.info("Backend deployment detected!")
                 break
-            
-            if i % 6 == 0: # Log every minute
-                self.logger.info(f"Still waiting for backend... ({i*10}s elapsed)")
-            
+            if i % 6 == 0:
+                self.logger.info(f"Still waiting for backend... ({i * 10}s elapsed)")
             await asyncio.sleep(10)
 
         if not backend_data:
@@ -63,7 +66,6 @@ class FrontendDeploymentAgent(BaseAgent):
             )
 
         backend_url = backend_data.get("service_url")
-
         if not backend_url:
             return AgentResult(
                 status=AgentStatus.FAILED,
@@ -71,13 +73,9 @@ class FrontendDeploymentAgent(BaseAgent):
                 errors=["Backend service URL not available"],
             )
 
-        # Get infrastructure information
-        infra_events = self.event_bus.get_history(EventType.INFRASTRUCTURE_READY)
-        infra_data = infra_events[-1].data if infra_events else {}
-
-        warnings = []
-        errors = []
-        deployment_result = {
+        warnings: list[str] = []
+        errors: list[str] = []
+        deployment_result: Dict[str, Any] = {
             "env_configured": False,
             "build_completed": False,
             "firebase_initialized": False,
@@ -96,67 +94,64 @@ class FrontendDeploymentAgent(BaseAgent):
                     errors=[f"Frontend path not found: {frontend_path}"],
                 )
 
-            # Configure environment variables with backend URL
+            # Step 1: Configure environment (tool call)
             self.logger.info("Configuring environment variables")
-            env_result = await self._configure_environment(frontend_path, backend_url)
-            if env_result["success"]:
+            env_raw = await configure_frontend_env(str(frontend_path), backend_url)
+            env_data = json.loads(env_raw)
+            if env_data.get("success"):
                 deployment_result["env_configured"] = True
             else:
-                warnings.append(f"Environment configuration: {env_result.get('error')}")
+                warnings.append(f"Environment configuration: {env_data.get('error')}")
 
-            # Install dependencies
+            # Step 2: Install dependencies (tool call)
             self.logger.info("Installing dependencies")
-            install_result = await self._install_dependencies(frontend_path)
-            if not install_result["success"]:
-                errors.append(f"Dependency installation failed: {install_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
+            install_raw = await install_npm_dependencies(str(frontend_path))
+            install_data = json.loads(install_raw)
+            if not install_data.get("success"):
+                errors.append(f"Dependency installation failed: {install_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
 
-            # Build React app
+            # Step 3: Build React app (tool call)
             self.logger.info("Building React production bundle")
-            build_result = await self._build_react_app(frontend_path)
-            if build_result["success"]:
+            build_raw = await build_frontend(str(frontend_path))
+            build_data = json.loads(build_raw)
+            if build_data.get("success"):
                 deployment_result["build_completed"] = True
             else:
-                errors.append(f"Build failed: {build_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
+                errors.append(f"Build failed: {build_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
 
-            # Initialize Firebase
-            self.logger.info("Initializing Firebase")
-            firebase_result = await self._initialize_firebase(frontend_path)
-            if firebase_result["success"]:
-                deployment_result["firebase_initialized"] = True
-            else:
-                errors.append(f"Firebase initialization failed: {firebase_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
-
-            # Deploy to Firebase Hosting
+            # Step 4: Deploy to Firebase (tool call)
             self.logger.info("Deploying to Firebase Hosting")
-            deploy_result = await self._deploy_to_firebase(frontend_path)
-            if deploy_result["success"]:
+            gcp_config = self.config.get("gcp", {})
+            project_id = gcp_config.get("project_id")
+            site_name = gcp_config.get("frontend", {}).get("site_name", project_id)
+
+            deploy_raw = await deploy_to_firebase(str(frontend_path), project_id, site_name)
+            deploy_data = json.loads(deploy_raw)
+            if deploy_data.get("success"):
+                deployment_result["firebase_initialized"] = True
                 deployment_result["deployed"] = True
-                deployment_result["hosting_url"] = deploy_result["hosting_url"]
+                deployment_result["hosting_url"] = deploy_data["hosting_url"]
             else:
-                error_msg = deploy_result.get('error', 'Unknown error')
-                # Log the full error for debugging
-                self.logger.error(f"Firebase deployment failed with error: {error_msg}")
-                errors.append(f"Firebase deployment failed: {error_msg}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
+                errors.append(f"Firebase deployment failed: {deploy_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
+
+            # Step 5: Use FAST model for quick deployment verification
+            try:
+                verification = await self.run_with_dedalus(
+                    prompt=(
+                        f"Frontend deployed to {deployment_result['hosting_url']} "
+                        f"with backend at {backend_url}. "
+                        f"Provide 1-2 quick post-deployment checks to verify everything works."
+                    ),
+                    model=ModelRole.FAST.value,
+                    instructions="You are a deployment verification expert. Be very concise.",
+                    max_steps=1,
                 )
+                deployment_result["verification_tips"] = verification
+            except Exception as e:
+                self.logger.warning(f"Verification tips skipped: {e}")
 
             # Publish frontend deployed event
             await self.event_bus.publish(Event(
@@ -181,223 +176,3 @@ class FrontendDeploymentAgent(BaseAgent):
                 data=deployment_result,
                 errors=[str(e)],
             )
-
-    async def _configure_environment(
-        self, frontend_path: Path, backend_url: str
-    ) -> Dict[str, Any]:
-        """Configure environment variables for React app."""
-        try:
-            # Create or update .env.production file
-            env_file = frontend_path / ".env.production"
-
-            env_content = f"""# Auto-generated by Cloudify Migration
-VITE_API_URL={backend_url}
-VITE_BACKEND_URL={backend_url}
-"""
-
-            env_file.write_text(env_content)
-
-            self.logger.info(f"Environment file created: {env_file}")
-
-            return {"success": True, "env_file": str(env_file)}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _install_dependencies(self, frontend_path: Path) -> Dict[str, Any]:
-        """Install npm dependencies."""
-        try:
-            # Check if package-lock.json exists
-            if (frontend_path / "package-lock.json").exists():
-                cmd = "npm ci"
-            else:
-                cmd = "npm install"
-
-            result = await self._run_command(cmd, cwd=frontend_path)
-
-            if result["returncode"] == 0:
-                return {"success": True}
-            else:
-                return {"success": False, "error": result["stderr"]}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _build_react_app(self, frontend_path: Path) -> Dict[str, Any]:
-        """Build React production bundle."""
-        try:
-            cmd = "npm run build"
-
-            result = await self._run_command(cmd, cwd=frontend_path)
-
-            if result["returncode"] == 0:
-                # Check if build directory exists
-                build_dir = frontend_path / "dist"  # Vite uses 'dist'
-                if not build_dir.exists():
-                    build_dir = frontend_path / "build"  # CRA uses 'build'
-
-                if build_dir.exists():
-                    return {"success": True, "build_dir": str(build_dir)}
-                else:
-                    return {"success": False, "error": "Build directory not found"}
-            else:
-                return {"success": False, "error": result["stderr"]}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _initialize_firebase(self, frontend_path: Path) -> Dict[str, Any]:
-        """Initialize Firebase configuration."""
-        try:
-            gcp_config = self.config.get("gcp", {})
-            project_id = gcp_config.get("project_id")
-            frontend_config = gcp_config.get("frontend", {})
-            site_name = frontend_config.get("site_name", f"{project_id}")
-
-            # Create or verify Firebase Hosting site exists
-            self.logger.info(f"Setting up Firebase Hosting site: {site_name}")
-            site_result = await self._ensure_hosting_site(project_id, site_name)
-            if not site_result["success"]:
-                self.logger.warning(f"Could not verify/create hosting site: {site_result.get('error')}")
-
-            # Create/update firebase.json with site configuration
-            firebase_config_file = frontend_path / "firebase.json"
-
-            # Always create/update to ensure correct configuration
-            firebase_config = {
-                "hosting": {
-                    "site": site_name,  # Specify the hosting site
-                    "public": "dist",  # Vite default
-                    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-                    "rewrites": [
-                        {
-                            "source": "**",
-                            "destination": "/index.html"
-                        }
-                    ]
-                }
-            }
-
-            # Check if build directory is 'build' instead of 'dist'
-            if (frontend_path / "build").exists() and not (frontend_path / "dist").exists():
-                firebase_config["hosting"]["public"] = "build"
-
-            firebase_config_file.write_text(json.dumps(firebase_config, indent=2))
-            self.logger.info(f"Firebase config created/updated: {firebase_config_file}")
-
-            # Create/update .firebaserc
-            firebaserc_file = frontend_path / ".firebaserc"
-            firebaserc_config = {
-                "projects": {
-                    "default": project_id
-                }
-            }
-
-            firebaserc_file.write_text(json.dumps(firebaserc_config, indent=2))
-            self.logger.info(f"Firebase RC file created/updated: {firebaserc_file}")
-
-            return {"success": True, "site_name": site_name}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _ensure_hosting_site(self, project_id: str, site_name: str) -> Dict[str, Any]:
-        """Ensure Firebase Hosting site exists."""
-        try:
-            # Check if site exists
-            check_cmd = f"firebase hosting:sites:list --project={project_id}"
-            result = await self._run_command(check_cmd)
-
-            if result["returncode"] == 0:
-                # Check if our site is in the list
-                if site_name in result["stdout"]:
-                    self.logger.info(f"Hosting site '{site_name}' already exists")
-                    return {"success": True}
-
-            # Create the hosting site
-            create_cmd = f"firebase hosting:sites:create {site_name} --project={project_id}"
-            create_result = await self._run_command(create_cmd)
-
-            if create_result["returncode"] == 0:
-                self.logger.info(f"Created hosting site: {site_name}")
-                return {"success": True}
-            else:
-                # Site might already exist, or creation failed
-                return {"success": False, "error": create_result.get("stderr", "Could not create site")}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _deploy_to_firebase(self, frontend_path: Path) -> Dict[str, Any]:
-        """Deploy to Firebase Hosting."""
-        try:
-            gcp_config = self.config.get("gcp", {})
-            project_id = gcp_config.get("project_id")
-            frontend_config = gcp_config.get("frontend", {})
-            site_name = frontend_config.get("site_name", project_id)
-
-            # Check if Firebase CLI is authenticated
-            self.logger.info("Checking Firebase authentication")
-            auth_check = await self._run_command("firebase projects:list", cwd=frontend_path)
-
-            if auth_check["returncode"] != 0:
-                return {
-                    "success": False,
-                    "error": "Not authenticated with Firebase CLI. Please run 'firebase login' before running the migration."
-                }
-
-            # Deploy to specific hosting site
-            deploy_cmd = f"firebase deploy --only hosting:{site_name} --project={project_id}"
-
-            result = await self._run_command(deploy_cmd, cwd=frontend_path)
-
-            if result["returncode"] == 0:
-                # Generate hosting URL based on site name
-                hosting_url = f"https://{site_name}.web.app"
-
-                # Try to extract actual URL from output
-                if "Hosting URL:" in result["stdout"]:
-                    for line in result["stdout"].split("\n"):
-                        if "Hosting URL:" in line:
-                            hosting_url = line.split("Hosting URL:")[-1].strip()
-                            break
-
-                return {
-                    "success": True,
-                    "hosting_url": hosting_url,
-                }
-            else:
-                # Include both stdout and stderr for better error diagnosis
-                error_output = result["stderr"] or result["stdout"]
-                self.logger.error(f"Firebase deploy command failed. stdout: {result['stdout']}, stderr: {result['stderr']}")
-                return {"success": False, "error": error_output}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _run_command(
-        self, command: str, cwd: Path = None
-    ) -> Dict[str, Any]:
-        """Run shell command asynchronously."""
-        try:
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=str(cwd) if cwd else None,
-            )
-
-            stdout, stderr = await process.communicate()
-
-            return {
-                "returncode": process.returncode,
-                "stdout": stdout.decode() if stdout else "",
-                "stderr": stderr.decode() if stderr else "",
-            }
-
-        except Exception as e:
-            return {
-                "returncode": 1,
-                "stdout": "",
-                "stderr": str(e),
-            }

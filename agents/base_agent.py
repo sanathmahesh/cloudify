@@ -1,7 +1,8 @@
 """
 Base Agent class for all migration agents.
 
-Provides common functionality for event-driven architecture and Claude AI integration.
+Provides common functionality for event-driven architecture and Dedalus AI integration
+with multi-model handoffs and tool calling.
 """
 
 import asyncio
@@ -13,8 +14,24 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 from uuid import uuid4
 
-import anthropic
-from anthropic import Anthropic
+from dedalus_labs import AsyncDedalus
+from dedalus_labs.lib.runner import DedalusRunner
+
+
+# ---------------------------------------------------------------------------
+# Model registry — optimal models per task type (key for hackathon judging)
+# ---------------------------------------------------------------------------
+
+class ModelRole(Enum):
+    """Semantic roles for model selection – each maps to the best provider."""
+    REASONING = "openai/gpt-4.1"            # Best for deep analysis & reasoning
+    CODE_GENERATION = "anthropic/claude-opus-4-6"  # Best for code generation
+    PLANNING = "anthropic/claude-sonnet-4-5-20250514"  # Great for planning & creative
+    FAST = "openai/gpt-4.1-mini"            # Fast & cheap for simple tasks
+    MULTI_MODEL = [                          # Let Dedalus route between models
+        "openai/gpt-4.1",
+        "anthropic/claude-opus-4-6",
+    ]
 
 
 class AgentStatus(Enum):
@@ -39,6 +56,9 @@ class EventType(Enum):
     MIGRATION_COMPLETE = "migration_complete"
     ERROR_OCCURRED = "error_occurred"
     PROGRESS_UPDATE = "progress_update"
+    # New: track model handoffs for demo visibility
+    MODEL_HANDOFF = "model_handoff"
+    TOOL_INVOKED = "tool_invoked"
 
 
 @dataclass
@@ -60,6 +80,9 @@ class AgentResult:
     warnings: List[str] = field(default_factory=list)
     execution_time: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # New: track which models and tools were used (great for demo)
+    models_used: List[str] = field(default_factory=list)
+    tools_called: List[str] = field(default_factory=list)
 
 
 class EventBus:
@@ -110,8 +133,10 @@ class BaseAgent(ABC):
     Base class for all migration agents.
 
     Provides common functionality:
-    - Event-driven communication
-    - Claude AI integration
+    - Event-driven communication via EventBus
+    - Dedalus SDK integration with DedalusRunner for multi-model handoffs
+    - Tool calling via typed Python functions
+    - MCP server connectivity
     - Logging and error handling
     - State management
     """
@@ -121,62 +146,68 @@ class BaseAgent(ABC):
         name: str,
         event_bus: EventBus,
         config: Dict[str, Any],
-        claude_api_key: str,
+        dedalus_api_key: str,
     ):
-        """
-        Initialize base agent.
-
-        Args:
-            name: Agent name
-            event_bus: Event bus for communication
-            config: Agent configuration
-            claude_api_key: Anthropic Claude API key
-        """
         self.name = name
         self.event_bus = event_bus
         self.config = config
         self.status = AgentStatus.IDLE
         self.logger = logging.getLogger(f"Agent.{name}")
 
-        # Initialize Claude client
-        self.claude = Anthropic(api_key=claude_api_key)
+        # Initialize Dedalus client & runner (replaces raw Anthropic client)
+        self.dedalus_client = AsyncDedalus(api_key=dedalus_api_key)
+        self.runner = DedalusRunner(self.dedalus_client)
 
         # Agent state
         self.state: Dict[str, Any] = {}
         self.result: Optional[AgentResult] = None
 
-    async def execute(self) -> AgentResult:
-        """
-        Execute the agent.
+        # Track models and tools used (for demo dashboard)
+        self._models_used: List[str] = []
+        self._tools_called: List[str] = []
 
-        Returns:
-            AgentResult with execution status and data
+    def _on_tool_event(self, event: Any) -> None:
+        """Callback fired when the DedalusRunner invokes a tool.
+
+        Publishes a TOOL_INVOKED event for real-time dashboard tracking.
         """
+        tool_name = getattr(event, "tool_name", str(event))
+        self._tools_called.append(tool_name)
+        self.logger.info(f"[{self.name}] Tool invoked: {tool_name}")
+        # Fire-and-forget event publish (non-blocking)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.event_bus.publish(Event(
+                event_type=EventType.TOOL_INVOKED,
+                source_agent=self.name,
+                data={"tool": tool_name},
+            )))
+        except RuntimeError:
+            pass  # No running loop – skip event
+
+    async def execute(self) -> AgentResult:
+        """Execute the agent."""
         start_time = asyncio.get_event_loop().time()
         self.status = AgentStatus.RUNNING
 
-        # Publish start event
         await self.event_bus.publish(Event(
             event_type=EventType.AGENT_STARTED,
             source_agent=self.name,
-            data={"agent": self.name}
+            data={"agent": self.name},
         ))
 
         try:
             self.logger.info(f"Starting {self.name}")
-
-            # Execute agent-specific logic
             result = await self._execute_impl()
 
-            # Calculate execution time
             execution_time = asyncio.get_event_loop().time() - start_time
             result.execution_time = execution_time
+            result.models_used = self._models_used
+            result.tools_called = self._tools_called
 
-            # Update status
             self.status = result.status
             self.result = result
 
-            # Publish completion event
             event_type = (
                 EventType.AGENT_COMPLETED
                 if result.status == AgentStatus.SUCCESS
@@ -191,12 +222,14 @@ class BaseAgent(ABC):
                     "status": result.status.value,
                     "data": result.data,
                     "execution_time": execution_time,
-                }
+                    "models_used": result.models_used,
+                    "tools_called": result.tools_called,
+                },
             ))
 
             self.logger.info(
                 f"Completed {self.name} - Status: {result.status.value} "
-                f"({execution_time:.2f}s)"
+                f"({execution_time:.2f}s) | Models: {result.models_used} | Tools: {result.tools_called}"
             )
 
             return result
@@ -215,7 +248,6 @@ class BaseAgent(ABC):
             self.status = AgentStatus.FAILED
             self.result = result
 
-            # Publish failure event
             await self.event_bus.publish(Event(
                 event_type=EventType.AGENT_FAILED,
                 source_agent=self.name,
@@ -223,67 +255,93 @@ class BaseAgent(ABC):
                     "agent": self.name,
                     "error": str(e),
                     "execution_time": execution_time,
-                }
+                },
             ))
 
             return result
 
     @abstractmethod
     async def _execute_impl(self) -> AgentResult:
-        """
-        Implement agent-specific execution logic.
-
-        Returns:
-            AgentResult with execution status and data
-        """
+        """Implement agent-specific execution logic."""
         pass
 
-    async def ask_claude(
+    async def run_with_dedalus(
         self,
         prompt: str,
-        system_prompt: Optional[str] = None,
-        max_tokens: int = 4096,
-        temperature: float = 0.3,
+        model: str | list[str] | None = None,
+        tools: list | None = None,
+        mcp_servers: list[str] | None = None,
+        instructions: str | None = None,
+        max_steps: int = 10,
+        policy: Any | None = None,
     ) -> str:
         """
-        Ask Claude AI for analysis or decision-making.
+        Run a task using the DedalusRunner with model handoffs and tool calling.
+
+        This replaces the old ask_claude() method. It supports:
+        - Multi-model handoffs via model list
+        - Local tool calling via typed functions
+        - MCP server integration
+        - Policy-based dynamic model routing
+        - on_tool_event callbacks for real-time tracking
 
         Args:
-            prompt: User prompt
-            system_prompt: System prompt (optional)
-            max_tokens: Maximum tokens in response
-            temperature: Temperature for response generation
+            prompt: The user prompt / task description.
+            model: Model ID or list of models for handoff routing.
+            tools: List of callable tool functions.
+            mcp_servers: List of MCP server slugs/URLs.
+            instructions: System instructions for the agent.
+            max_steps: Max agentic loop iterations.
+            policy: Optional policy function for dynamic routing.
 
         Returns:
-            Claude's response as string
+            The final text output from the runner.
         """
-        try:
-            model = self.config.get("ai", {}).get("model", "claude-opus-4-6")
+        # Default model from config
+        if model is None:
+            model = self.config.get("ai", {}).get("model", "anthropic/claude-opus-4-6")
 
-            kwargs = {
-                "model": model,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "messages": [{"role": "user", "content": prompt}],
-            }
+        # Track which model(s) we're using
+        if isinstance(model, list):
+            self._models_used.extend(model)
+        else:
+            self._models_used.append(model)
 
-            if system_prompt:
-                kwargs["system"] = system_prompt
+        # Publish model handoff event (for demo visibility)
+        await self.event_bus.publish(Event(
+            event_type=EventType.MODEL_HANDOFF,
+            source_agent=self.name,
+            data={"model": model, "prompt_preview": prompt[:100]},
+        ))
 
-            self.logger.debug(f"Asking Claude: {prompt[:100]}...")
+        kwargs: Dict[str, Any] = {
+            "input": prompt,
+            "model": model,
+            "max_steps": max_steps,
+            "on_tool_event": self._on_tool_event,
+        }
 
-            response = self.claude.messages.create(**kwargs)
+        if tools:
+            kwargs["tools"] = tools
+        if mcp_servers:
+            kwargs["mcp_servers"] = mcp_servers
+        if instructions:
+            kwargs["instructions"] = instructions
+        if policy:
+            kwargs["policy"] = policy
 
-            # Extract text from response
-            text = response.content[0].text if response.content else ""
+        temperature = self.config.get("ai", {}).get("temperature", 0.3)
+        kwargs["temperature"] = temperature
 
-            self.logger.debug(f"Claude response: {text[:100]}...")
+        self.logger.debug(f"DedalusRunner.run() with model={model}, tools={[t.__name__ for t in (tools or [])]}")
 
-            return text
+        result = await self.runner.run(**kwargs)
 
-        except Exception as e:
-            self.logger.error(f"Error asking Claude: {str(e)}")
-            raise
+        # Track tools called from the RunResult
+        if hasattr(result, "tools_called") and result.tools_called:
+            self._tools_called.extend(result.tools_called)
+
+        return result.final_output
 
     def update_state(self, key: str, value: Any) -> None:
         """Update agent state."""
