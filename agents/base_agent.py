@@ -166,6 +166,29 @@ class BaseAgent(ABC):
         self._models_used: List[str] = []
         self._tools_called: List[str] = []
 
+    async def _invoke_tool(self, tool_fn: Callable, *args, **kwargs) -> Any:
+        """Call a tool function directly and track it for the Dedalus SDK usage summary.
+
+        Use this instead of calling tool functions directly so that every
+        tool invocation is recorded in _tools_called and published as a
+        TOOL_INVOKED event for the real-time dashboard.
+        """
+        tool_name = tool_fn.__name__
+        self._tools_called.append(tool_name)
+        self.logger.info(f"[{self.name}] Tool invoked: {tool_name}")
+
+        # Publish event for real-time tracking
+        try:
+            await self.event_bus.publish(Event(
+                event_type=EventType.TOOL_INVOKED,
+                source_agent=self.name,
+                data={"tool": tool_name},
+            ))
+        except Exception:
+            pass
+
+        return await tool_fn(*args, **kwargs)
+
     def _on_tool_event(self, event: Any) -> None:
         """Callback fired when the DedalusRunner invokes a tool.
 

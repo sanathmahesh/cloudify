@@ -149,7 +149,8 @@ class DatabaseMigrationAgent(BaseAgent):
         self.logger.info(f"Creating Cloud SQL instance: {instance_name}")
 
         # Use Dedalus tool to create Cloud SQL
-        raw = await create_cloud_sql_instance(
+        raw = await self._invoke_tool(
+            create_cloud_sql_instance,
             project_id, region, instance_name, database_name, tier, db_version,
         )
         data = json.loads(raw)

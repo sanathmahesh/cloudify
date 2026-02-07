@@ -63,7 +63,7 @@ class InfrastructureAgent(BaseAgent):
 
         try:
             # Step 1: Check gcloud auth (tool call)
-            auth_raw = await check_gcloud_auth()
+            auth_raw = await self._invoke_tool(check_gcloud_auth)
             auth_data = json.loads(auth_raw)
 
             if not auth_data.get("installed"):
@@ -84,7 +84,8 @@ class InfrastructureAgent(BaseAgent):
 
             # Step 2: Enable APIs (tool call)
             self.logger.info("Enabling required GCP APIs")
-            apis_raw = await enable_gcp_apis(
+            apis_raw = await self._invoke_tool(
+                enable_gcp_apis,
                 project_id,
                 ["run.googleapis.com", "artifactregistry.googleapis.com",
                  "cloudbuild.googleapis.com", "firebase.googleapis.com"],
@@ -97,7 +98,7 @@ class InfrastructureAgent(BaseAgent):
             # Step 3: Create Artifact Registry (tool call)
             self.logger.info("Creating Artifact Registry repository")
             repo_name = gcp_config.get("artifact_registry", {}).get("repository_name", "cloudify-apps")
-            registry_raw = await create_artifact_registry(project_id, region, repo_name)
+            registry_raw = await self._invoke_tool(create_artifact_registry, project_id, region, repo_name)
             registry_data = json.loads(registry_raw)
             if registry_data.get("success"):
                 provisioned["artifact_registry"] = {
@@ -111,7 +112,7 @@ class InfrastructureAgent(BaseAgent):
 
             # Step 4: Set up Firebase (tool call)
             self.logger.info("Setting up Firebase project")
-            firebase_raw = await setup_firebase_project(project_id)
+            firebase_raw = await self._invoke_tool(setup_firebase_project, project_id)
             firebase_data = json.loads(firebase_raw)
             if firebase_data.get("success"):
                 provisioned["firebase"] = {
@@ -123,7 +124,7 @@ class InfrastructureAgent(BaseAgent):
 
             # Step 5: Configure IAM (tool call)
             self.logger.info("Configuring IAM permissions")
-            iam_raw = await configure_iam_permissions(project_id)
+            iam_raw = await self._invoke_tool(configure_iam_permissions, project_id)
             iam_data = json.loads(iam_raw)
             if iam_data.get("success"):
                 provisioned["iam"] = iam_data

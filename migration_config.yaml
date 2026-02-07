@@ -4,7 +4,7 @@
 # Source Application Configuration
 source:
   # Path to the application repository (relative or absolute)
-  path: "/Users/aritraraychaudhuri/Downloads/BasicApp"
+  path: "../BasicApp"
 
   # Application type detection (auto-detect or specify)
   backend:

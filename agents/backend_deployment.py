@@ -100,7 +100,7 @@ class BackendDeploymentAgent(BaseAgent):
             # Step 1: Generate Dockerfile using CODE_GENERATION model
             self.logger.info("Generating Dockerfile with Dedalus CODE_GENERATION model")
             dockerfile_content = await self._generate_dockerfile(analysis_data)
-            write_raw = await write_dockerfile(str(backend_path), dockerfile_content)
+            write_raw = await self._invoke_tool(write_dockerfile, str(backend_path), dockerfile_content)
             write_data = json.loads(write_raw)
             if write_data.get("success"):
                 deployment_result["dockerfile_created"] = True
@@ -113,7 +113,7 @@ class BackendDeploymentAgent(BaseAgent):
             if site_name:
                 frontend_url = f"https://{site_name}.web.app"
                 self.logger.info(f"Updating CORS for frontend: {frontend_url}")
-                cors_raw = await update_cors_origins(str(backend_path), frontend_url)
+                cors_raw = await self._invoke_tool(update_cors_origins, str(backend_path), frontend_url)
                 cors_data = json.loads(cors_raw)
                 if cors_data.get("success"):
                     self.logger.info(f"CORS updated: {cors_data.get('files_updated', 0)} file(s)")
@@ -127,7 +127,7 @@ class BackendDeploymentAgent(BaseAgent):
             image_tag = f"{registry_url}/{service_name}:latest"
 
             self.logger.info(f"Building Docker image: {image_tag}")
-            build_raw = await build_docker_image(str(backend_path), image_tag)
+            build_raw = await self._invoke_tool(build_docker_image, str(backend_path), image_tag)
             build_data = json.loads(build_raw)
             if build_data.get("success"):
                 deployment_result["image_built"] = True
@@ -137,7 +137,7 @@ class BackendDeploymentAgent(BaseAgent):
 
             # Step 4: Push image (tool call)
             self.logger.info("Pushing image to Artifact Registry")
-            push_raw = await push_docker_image(image_tag)
+            push_raw = await self._invoke_tool(push_docker_image, image_tag)
             push_data = json.loads(push_raw)
             if push_data.get("success"):
                 deployment_result["image_pushed"] = True
@@ -148,7 +148,8 @@ class BackendDeploymentAgent(BaseAgent):
             # Step 5: Deploy to Cloud Run (tool call)
             self.logger.info("Deploying to Cloud Run")
             backend_config = gcp_config.get("backend", {})
-            deploy_raw = await deploy_to_cloud_run(
+            deploy_raw = await self._invoke_tool(
+                deploy_to_cloud_run,
                 project_id=project_id,
                 region=gcp_config.get("region", "us-central1"),
                 service_name=service_name,

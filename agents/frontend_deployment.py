@@ -96,7 +96,7 @@ class FrontendDeploymentAgent(BaseAgent):
 
             # Step 1: Configure environment (tool call)
             self.logger.info("Configuring environment variables")
-            env_raw = await configure_frontend_env(str(frontend_path), backend_url)
+            env_raw = await self._invoke_tool(configure_frontend_env, str(frontend_path), backend_url)
             env_data = json.loads(env_raw)
             if env_data.get("success"):
                 deployment_result["env_configured"] = True
@@ -105,7 +105,7 @@ class FrontendDeploymentAgent(BaseAgent):
 
             # Step 2: Install dependencies (tool call)
             self.logger.info("Installing dependencies")
-            install_raw = await install_npm_dependencies(str(frontend_path))
+            install_raw = await self._invoke_tool(install_npm_dependencies, str(frontend_path))
             install_data = json.loads(install_raw)
             if not install_data.get("success"):
                 errors.append(f"Dependency installation failed: {install_data.get('error')}")
@@ -113,7 +113,7 @@ class FrontendDeploymentAgent(BaseAgent):
 
             # Step 3: Build React app (tool call)
             self.logger.info("Building React production bundle")
-            build_raw = await build_frontend(str(frontend_path))
+            build_raw = await self._invoke_tool(build_frontend, str(frontend_path))
             build_data = json.loads(build_raw)
             if build_data.get("success"):
                 deployment_result["build_completed"] = True
@@ -127,7 +127,7 @@ class FrontendDeploymentAgent(BaseAgent):
             project_id = gcp_config.get("project_id")
             site_name = gcp_config.get("frontend", {}).get("site_name", project_id)
 
-            deploy_raw = await deploy_to_firebase(str(frontend_path), project_id, site_name)
+            deploy_raw = await self._invoke_tool(deploy_to_firebase, str(frontend_path), project_id, site_name)
             deploy_data = json.loads(deploy_raw)
             if deploy_data.get("success"):
                 deployment_result["firebase_initialized"] = True

@@ -313,13 +313,13 @@ def display_dedalus_summary(data: dict):
             console.print("\n[bold cyan]Models Used (Multi-Model Handoffs):[/bold cyan]")
             for model in set(all_models):
                 count = all_models.count(model)
-                console.print(f"  • {model} ({count}x)")
+                console.print(f"  • {model}")
 
         if all_tools:
             console.print("\n[bold cyan]Tools Called (Dedalus Tool Calling):[/bold cyan]")
             for tool in set(all_tools):
                 count = all_tools.count(tool)
-                console.print(f"  • {tool} ({count}x)")
+                console.print(f"  • {tool}")
 
         console.print(
             f"\n[dim]Total model handoffs: {len(all_models)} | "
@@ -330,7 +330,7 @@ def display_dedalus_summary(data: dict):
 @app.command()
 def migrate(
     source_path: Path = typer.Option(
-        "/Users/aritraraychaudhuri/Downloads/BasicApp",
+        "../BasicApp",
         "--source-path",
         "-s",
         help="Path to source application directory",

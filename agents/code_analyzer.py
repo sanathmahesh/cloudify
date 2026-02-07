@@ -75,7 +75,7 @@ class CodeAnalyzerAgent(BaseAgent):
 
             if frontend_path.exists():
                 self.logger.info("Scanning frontend with Dedalus tools")
-                frontend_raw = await analyze_react_app(str(frontend_path))
+                frontend_raw = await self._invoke_tool(analyze_react_app, str(frontend_path))
                 analysis_result["frontend"] = json.loads(frontend_raw)
             else:
                 errors.append(f"Frontend path not found: {frontend_path}")
@@ -85,7 +85,7 @@ class CodeAnalyzerAgent(BaseAgent):
                 "spring.datasource.url", ""
             )
             if db_url:
-                db_raw = await detect_database_type(db_url)
+                db_raw = await self._invoke_tool(detect_database_type, db_url)
                 analysis_result["database"] = json.loads(db_raw)
 
             # Phase 3: Use Dedalus REASONING model + tools + MCP for recommendations
@@ -140,26 +140,26 @@ class CodeAnalyzerAgent(BaseAgent):
         # Detect build tool and parse
         if (bp / "pom.xml").exists():
             analysis["build_tool"] = "maven"
-            maven_raw = await scan_maven_pom(backend_path)
+            maven_raw = await self._invoke_tool(scan_maven_pom, backend_path)
             maven_data = json.loads(maven_raw)
             analysis["java_version"] = maven_data.get("java_version")
             analysis["spring_boot_version"] = maven_data.get("spring_boot_version")
             analysis["dependencies"] = maven_data.get("dependencies", [])
         elif (bp / "build.gradle").exists():
             analysis["build_tool"] = "gradle"
-            gradle_raw = await scan_gradle_build(backend_path)
+            gradle_raw = await self._invoke_tool(scan_gradle_build, backend_path)
             gradle_data = json.loads(gradle_raw)
             analysis["java_version"] = gradle_data.get("java_version")
             analysis["dependencies"] = gradle_data.get("dependencies", [])
 
         # Analyze properties
-        props_raw = await analyze_spring_properties(backend_path)
+        props_raw = await self._invoke_tool(analyze_spring_properties, backend_path)
         props_data = json.loads(props_raw)
         analysis["database_config"] = props_data.get("database_config", {})
         analysis["server_config"] = props_data.get("server_config", {})
 
         # Extract API endpoints
-        endpoints_raw = await extract_api_endpoints(backend_path)
+        endpoints_raw = await self._invoke_tool(extract_api_endpoints, backend_path)
         analysis["controllers"] = json.loads(endpoints_raw)
 
         return analysis
