@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, useInView, useScroll, useMotionValue, useMotionValueEvent } from "framer-motion";
+import { motion, useInView, useScroll, useMotionValue, useMotionValueEvent, useSpring } from "framer-motion";
 import type { CSSProperties } from "react";
 
 const steps = [
@@ -59,6 +59,8 @@ export default function HowItWorks() {
   const [indicatorOffsets, setIndicatorOffsets] = useState<number[]>([]);
   const progress = useMotionValue(0);
   const dotY = useMotionValue(0);
+  const smoothProgress = useSpring(progress, { stiffness: 160, damping: 26, mass: 0.8 });
+  const smoothDotY = useSpring(dotY, { stiffness: 200, damping: 28, mass: 0.8 });
 
   const { scrollY } = useScroll();
 
@@ -165,11 +167,11 @@ export default function HowItWorks() {
                     <div className="absolute inset-0 bg-border-subtle" />
                     <motion.div
                       className="absolute inset-0 bg-gradient-to-b from-accent-purple to-accent-green"
-                      style={{ scaleY: progress, transformOrigin: "top" }}
+                      style={{ scaleY: smoothProgress, transformOrigin: "top" }}
                     />
                     <motion.div
                       className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-accent-green"
-                      style={{ y: dotY }}
+                      style={{ y: smoothDotY }}
                     />
                   </div>
 
