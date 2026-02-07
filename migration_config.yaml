@@ -1,0 +1,63 @@
+# =============================================================================
+# Cloudify - Cloud Migration Configuration
+# =============================================================================
+# This file defines all settings for migrating a Spring Boot + React + H2
+# application to Google Cloud Platform.
+
+# -- GCP Project Settings ----------------------------------------------------
+gcp:
+  project_id: "my-hackathon-project"       # Your GCP project ID
+  region: "us-central1"                     # Deployment region
+  zone: "us-central1-a"                     # Deployment zone (for zonal resources)
+  billing_account: ""                       # Optional: billing account ID
+
+# -- Source Application Paths -------------------------------------------------
+source:
+  root_path: "./expense-calculator-app"     # Path to the source application
+  backend_path: "backend"                   # Relative path to Spring Boot app
+  frontend_path: "frontend"                 # Relative path to React app
+
+# -- Backend Deployment Settings ----------------------------------------------
+backend:
+  service_name: "backend-api"               # Cloud Run service name
+  port: 8080                                # Application port
+  memory: "512Mi"                           # Cloud Run memory allocation
+  cpu: "1"                                  # Cloud Run CPU allocation
+  min_instances: 0                          # Minimum instances (0 = scale to zero)
+  max_instances: 3                          # Maximum instances
+  concurrency: 80                           # Max concurrent requests per instance
+  env_vars: {}                              # Additional environment variables
+  jvm_opts: "-Xmx384m -Xms128m"            # JVM options for the container
+  java_version: "17"                        # Java version for the Docker image
+
+# -- Frontend Deployment Settings ---------------------------------------------
+frontend:
+  site_name: ""                             # Firebase Hosting site name (auto-generated if empty)
+  build_command: "npm run build"            # Command to build the React app
+  build_output: "build"                     # Build output directory (build or dist)
+  node_version: "18"                        # Node.js version for builds
+  env_vars: {}                              # Build-time environment variables
+
+# -- Database Settings --------------------------------------------------------
+database:
+  migration_strategy: "keep_h2"             # Options: keep_h2, migrate_cloudsql
+  # Cloud SQL settings (only used if migration_strategy is migrate_cloudsql)
+  cloudsql:
+    instance_name: "app-db"                 # Cloud SQL instance name
+    tier: "db-f1-micro"                     # Machine tier
+    database_name: "appdb"                  # Database name
+    database_version: "POSTGRES_15"         # Database version
+
+# -- Agent Configuration ------------------------------------------------------
+agents:
+  model: "anthropic/claude-opus-4-6"        # LLM model for agent reasoning
+  max_retries: 3                            # Max retries per agent on failure
+  timeout: 300                              # Agent timeout in seconds
+  verbose: true                             # Enable verbose agent logging
+
+# -- Execution Mode -----------------------------------------------------------
+execution:
+  mode: "automated"                         # Options: automated, dry_run
+  parallel_deployments: true                # Deploy backend and frontend in parallel
+  generate_report: true                     # Generate migration summary report
+  cleanup_on_failure: true                  # Rollback resources on failure
