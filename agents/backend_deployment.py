@@ -264,8 +264,10 @@ Provide ONLY the Dockerfile content, no explanations.
         try:
             # Configure Docker authentication for Artifact Registry
             region = image_tag.split("-docker")[0]
-            auth_cmd = f"gcloud auth configure-docker {region}-docker.pkg.dev"
-            await self._run_command(auth_cmd)
+            auth_cmd = f"gcloud auth configure-docker {region}-docker.pkg.dev --quiet"
+            auth_result = await self._run_command(auth_cmd)
+            if auth_result["returncode"] != 0:
+                return {"success": False, "error": f"Docker auth failed: {auth_result['stderr']}"}
 
             # Push image
             push_cmd = f"docker push {image_tag}"

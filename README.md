@@ -255,7 +255,7 @@ git clone https://github.com/sanathmahesh/BasicApp.git
 
 # 2. Run migration with all defaults
 python migration_orchestrator.py migrate \
-  --source-path ../BasicApp \
+  --source-path /Users/aritraraychaudhuri/Downloads/BasicApp \
   --gcp-project cloudify-486706 \
   --mode automated
 
