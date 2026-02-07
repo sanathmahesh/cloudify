@@ -54,7 +54,7 @@ export default function Hero() {
             </linearGradient>
           </defs>
           <path
-            d="M180 420 C 310 360, 390 330, 500 300"
+            d="M180 420 C 320 260, 400 220, 500 190"
             stroke="url(#dataStream)"
             strokeWidth="2"
             strokeDasharray="6 10"
@@ -63,7 +63,7 @@ export default function Hero() {
             fill="none"
           />
           <path
-            d="M820 420 C 690 360, 610 330, 500 300"
+            d="M820 420 C 680 260, 600 220, 500 190"
             stroke="url(#dataStream)"
             strokeWidth="2"
             strokeDasharray="6 10"
