@@ -1,0 +1,142 @@
+# Cloud Migration Configuration Template
+# ========================================
+
+# Source Application Configuration
+source:
+  # Path to the application repository (relative or absolute)
+  path: "./BasicApp"
+
+  # Application type detection (auto-detect or specify)
+  backend:
+    type: "spring-boot"  # spring-boot, django, express, etc.
+    path: "backend"
+    build_tool: "maven"  # maven or gradle
+    java_version: "21"
+
+  frontend:
+    type: "react"  # react, angular, vue, etc.
+    path: "frontend"
+    build_tool: "vite"  # vite, webpack, create-react-app
+    node_version: "20"
+
+  database:
+    type: "h2"  # h2, postgresql, mysql, etc.
+    mode: "in-memory"  # in-memory or file-based
+    # For file-based H2, specify the data file location
+    data_file: null
+
+# Google Cloud Platform Configuration
+gcp:
+  # GCP Project Settings
+  project_id: "my-hackathon-project"
+  region: "us-central1"
+  zone: "us-central1-a"
+
+  # Authentication (uses one of the following in order):
+  # 1. Service account key file path
+  # 2. Application Default Credentials (ADC)
+  service_account_key: null  # Path to JSON key file or null for ADC
+
+  # Backend Deployment (Cloud Run)
+  backend:
+    service_name: "expense-calculator-backend"
+    container_port: 8080
+    memory: "1Gi"
+    cpu: "1"
+    min_instances: 0
+    max_instances: 10
+    timeout: 300  # seconds
+    # Environment variables for Cloud Run
+    env_vars:
+      SPRING_PROFILES_ACTIVE: "prod"
+    # Allow unauthenticated access (set false for private APIs)
+    allow_unauthenticated: true
+
+  # Frontend Deployment (Firebase Hosting)
+  frontend:
+    site_name: "expense-calculator-frontend"
+    # Custom domain (optional)
+    custom_domain: null
+
+  # Database Migration Options
+  database:
+    # Strategy: "keep-h2" or "migrate-to-cloud-sql"
+    strategy: "keep-h2"
+
+    # Cloud SQL settings (only used if strategy is "migrate-to-cloud-sql")
+    cloud_sql:
+      instance_name: "expense-calculator-db"
+      database_name: "expense_calculator"
+      tier: "db-f1-micro"  # db-f1-micro, db-g1-small, etc.
+      database_version: "POSTGRES_15"  # POSTGRES_15, MYSQL_8_0, etc.
+      # Auto-generate strong password or specify
+      root_password: null
+
+  # Artifact Registry
+  artifact_registry:
+    repository_name: "cloudify-apps"
+    format: "docker"
+    description: "Docker images for migrated applications"
+
+# Migration Behavior
+migration:
+  # Execution mode: "interactive" or "automated"
+  mode: "interactive"
+
+  # Dry run: Preview changes without executing
+  dry_run: false
+
+  # Enable detailed logging
+  verbose: true
+
+  # Backup source code before migration
+  backup_enabled: true
+  backup_path: "./backups"
+
+  # Agent configuration
+  agents:
+    # Maximum retry attempts for failed operations
+    max_retries: 3
+
+    # Timeout for each agent (seconds)
+    timeout: 600
+
+    # Enable parallel execution where possible
+    parallel_execution: true
+
+# AI Agent Configuration
+ai:
+  # Claude API model to use
+  model: "claude-opus-4.6"  # claude-opus-4.6, claude-sonnet-4.5, claude-haiku-4.5
+
+  # Temperature for AI decision-making (0.0-1.0)
+  temperature: 0.3
+
+  # Maximum tokens for AI responses
+  max_tokens: 4096
+
+  # Enable AI-powered recommendations
+  recommendations_enabled: true
+
+# Post-Migration Configuration
+post_migration:
+  # Run health checks after deployment
+  health_checks: true
+
+  # Generate migration report
+  generate_report: true
+  report_path: "./migration_report.md"
+
+  # Display cost estimates
+  show_cost_estimates: true
+
+  # Open deployed URLs in browser
+  open_in_browser: false
+
+# Notification Settings (optional)
+notifications:
+  enabled: false
+  # Slack webhook URL
+  slack_webhook: null
+  # Email notification
+  email: null

@@ -1,0 +1,51 @@
+# Core Dependencies
+dedalus-labs>=0.1.1
+anthropic>=0.42.0
+
+# CLI and Output
+typer[all]>=0.15.0
+rich>=13.9.0
+click>=8.1.0
+
+# Configuration
+pyyaml>=6.0.2
+python-dotenv>=1.0.1
+
+# GCP SDK
+google-cloud-run>=0.11.1
+google-cloud-storage>=2.19.0
+google-cloud-firestore>=2.20.0
+google-auth>=2.37.0
+
+# HTTP and API
+requests>=2.32.0
+httpx>=0.28.0
+
+# File operations and parsing
+pathlib2>=2.3.7
+toml>=0.10.2
+
+# Async support
+aiofiles>=24.1.0
+
+# Logging
+structlog>=24.4.0
+coloredlogs>=15.0.1
+
+# Docker operations (optional)
+docker>=7.1.0
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.25.0
+pytest-cov>=6.0.0
+pytest-mock>=3.15.0
+
+# Type checking
+mypy>=1.14.0
+types-requests>=2.32.0
+types-PyYAML>=6.0.12
+
+# Code quality
+black>=24.10.0
+ruff>=0.8.0
