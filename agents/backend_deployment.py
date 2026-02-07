@@ -1,41 +1,59 @@
 """
-Backend Deployment Agent
+Backend Deployment Agent — Powered by Dedalus SDK
 
-Deploys Spring Boot application to Google Cloud Run.
+Deploys Spring Boot application to Cloud Run using:
+- CODE_GENERATION model (Claude Opus) for Dockerfile generation
+- FAST model (GPT-4.1-mini) for error triage
+- Local tools for Docker build, push, and Cloud Run deploy
+- Policy-based escalation: fast model first, escalate to reasoning on failure
 """
 
-import asyncio
-import os
+import json
 from pathlib import Path
 from typing import Any, Dict
 
-from .base_agent import AgentResult, AgentStatus, BaseAgent, Event, EventType
+from .base_agent import AgentResult, AgentStatus, BaseAgent, Event, EventType, ModelRole
+from .dedalus_tools import (
+    BACKEND_DEPLOYMENT_TOOLS,
+    build_docker_image,
+    deploy_to_cloud_run,
+    push_docker_image,
+    update_cors_origins,
+    write_dockerfile,
+)
+
+
+def _escalation_policy(state: Any) -> dict:
+    """Dynamic model routing policy: escalate from fast to reasoning model on complex steps.
+
+    If the agent has already used more than 3 steps (meaning it's struggling),
+    escalate to the full reasoning model for better problem-solving.
+    """
+    steps = getattr(state, "steps_used", 0)
+    if steps > 3:
+        return {"model": ModelRole.REASONING.value}
+    return {"model": ModelRole.CODE_GENERATION.value}
 
 
 class BackendDeploymentAgent(BaseAgent):
     """
-    Backend Deployment agent that deploys Spring Boot to Cloud Run.
+    Backend Deployment agent powered by Dedalus SDK.
 
-    Responsibilities:
-    - Generate optimized Dockerfile for Spring Boot
-    - Update application.properties with GCP configurations
-    - Build Docker image
-    - Push to Artifact Registry
-    - Deploy to Cloud Run
-    - Configure environment variables and secrets
+    Uses CODE_GENERATION model for Dockerfile creation and FAST model
+    for simple deployment operations, with escalation policy.
     """
 
-    def __init__(self, event_bus, config: Dict[str, Any], claude_api_key: str):
+    def __init__(self, event_bus, config: Dict[str, Any], dedalus_api_key: str):
         super().__init__(
             name="BackendDeployment",
             event_bus=event_bus,
             config=config,
-            claude_api_key=claude_api_key,
+            dedalus_api_key=dedalus_api_key,
         )
 
     async def _execute_impl(self) -> AgentResult:
-        """Execute backend deployment."""
-        self.logger.info("Starting backend deployment")
+        """Execute backend deployment with model handoffs and tool calling."""
+        self.logger.info("Starting backend deployment with Dedalus CODE_GENERATION model")
 
         # Get infrastructure information
         infra_events = self.event_bus.get_history(EventType.INFRASTRUCTURE_READY)
@@ -47,9 +65,7 @@ class BackendDeploymentAgent(BaseAgent):
             )
 
         infra_data = infra_events[-1].data
-        artifact_registry = infra_data.get("artifact_registry", {})
-        registry_url = artifact_registry.get("repository_url")
-
+        registry_url = infra_data.get("artifact_registry", {}).get("repository_url")
         if not registry_url:
             return AgentResult(
                 status=AgentStatus.FAILED,
@@ -57,13 +73,12 @@ class BackendDeploymentAgent(BaseAgent):
                 errors=["Artifact Registry repository URL not found"],
             )
 
-        # Get analysis data
         analysis_events = self.event_bus.get_history(EventType.ANALYSIS_COMPLETE)
         analysis_data = analysis_events[-1].data if analysis_events else {}
 
-        warnings = []
-        errors = []
-        deployment_result = {
+        warnings: list[str] = []
+        errors: list[str] = []
+        deployment_result: Dict[str, Any] = {
             "dockerfile_created": False,
             "image_built": False,
             "image_pushed": False,
@@ -82,68 +97,78 @@ class BackendDeploymentAgent(BaseAgent):
                     errors=[f"Backend path not found: {backend_path}"],
                 )
 
-            # Generate Dockerfile
-            self.logger.info("Generating Dockerfile")
-            dockerfile_result = await self._generate_dockerfile(backend_path, analysis_data)
-            if dockerfile_result["success"]:
+            # Step 1: Generate Dockerfile using CODE_GENERATION model
+            self.logger.info("Generating Dockerfile with Dedalus CODE_GENERATION model")
+            dockerfile_content = await self._generate_dockerfile(analysis_data)
+            write_raw = await self._invoke_tool(write_dockerfile, str(backend_path), dockerfile_content)
+            write_data = json.loads(write_raw)
+            if write_data.get("success"):
                 deployment_result["dockerfile_created"] = True
             else:
-                errors.append(f"Dockerfile generation failed: {dockerfile_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
+                errors.append(f"Dockerfile generation failed: {write_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
 
-            # Build Docker image
+            # Step 2: Update CORS configuration (tool call)
+            site_name = self.config.get("gcp", {}).get("frontend", {}).get("site_name")
+            if site_name:
+                frontend_url = f"https://{site_name}.web.app"
+                self.logger.info(f"Updating CORS for frontend: {frontend_url}")
+                cors_raw = await self._invoke_tool(update_cors_origins, str(backend_path), frontend_url)
+                cors_data = json.loads(cors_raw)
+                if cors_data.get("success"):
+                    self.logger.info(f"CORS updated: {cors_data.get('files_updated', 0)} file(s)")
+                else:
+                    warnings.append(f"CORS update: {cors_data.get('error')}")
+
+            # Step 3: Build Docker image (tool call)
             gcp_config = self.config.get("gcp", {})
             project_id = gcp_config.get("project_id")
             service_name = gcp_config.get("backend", {}).get("service_name", "app-backend")
             image_tag = f"{registry_url}/{service_name}:latest"
 
             self.logger.info(f"Building Docker image: {image_tag}")
-            build_result = await self._build_docker_image(backend_path, image_tag)
-            if build_result["success"]:
+            build_raw = await self._invoke_tool(build_docker_image, str(backend_path), image_tag)
+            build_data = json.loads(build_raw)
+            if build_data.get("success"):
                 deployment_result["image_built"] = True
             else:
-                errors.append(f"Docker build failed: {build_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
+                errors.append(f"Docker build failed: {build_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
 
-            # Push image to Artifact Registry
+            # Step 4: Push image (tool call)
             self.logger.info("Pushing image to Artifact Registry")
-            push_result = await self._push_docker_image(image_tag)
-            if push_result["success"]:
+            push_raw = await self._invoke_tool(push_docker_image, image_tag)
+            push_data = json.loads(push_raw)
+            if push_data.get("success"):
                 deployment_result["image_pushed"] = True
             else:
-                errors.append(f"Docker push failed: {push_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
+                errors.append(f"Docker push failed: {push_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
 
-            # Deploy to Cloud Run
+            # Step 5: Deploy to Cloud Run (tool call)
             self.logger.info("Deploying to Cloud Run")
-            deploy_result = await self._deploy_to_cloud_run(
-                project_id,
-                service_name,
-                image_tag,
-                gcp_config
+            backend_config = gcp_config.get("backend", {})
+            deploy_raw = await self._invoke_tool(
+                deploy_to_cloud_run,
+                project_id=project_id,
+                region=gcp_config.get("region", "us-central1"),
+                service_name=service_name,
+                image_tag=image_tag,
+                port=backend_config.get("container_port", 8080),
+                memory=backend_config.get("memory", "1Gi"),
+                cpu=backend_config.get("cpu", "1"),
+                min_instances=backend_config.get("min_instances", 0),
+                max_instances=backend_config.get("max_instances", 10),
+                env_vars=backend_config.get("env_vars", {}),
+                allow_unauthenticated=backend_config.get("allow_unauthenticated", True),
             )
-            if deploy_result["success"]:
+            deploy_data = json.loads(deploy_raw)
+            if deploy_data.get("success"):
                 deployment_result["service_deployed"] = True
-                deployment_result["service_url"] = deploy_result["service_url"]
+                deployment_result["service_url"] = deploy_data["service_url"]
             else:
-                errors.append(f"Cloud Run deployment failed: {deploy_result.get('error')}")
-                return AgentResult(
-                    status=AgentStatus.FAILED,
-                    data=deployment_result,
-                    errors=errors,
-                )
+                errors.append(f"Cloud Run deployment failed: {deploy_data.get('error')}")
+                return AgentResult(status=AgentStatus.FAILED, data=deployment_result, errors=errors)
 
             # Publish backend deployed event
             await self.event_bus.publish(Event(
@@ -170,21 +195,22 @@ class BackendDeploymentAgent(BaseAgent):
                 errors=[str(e)],
             )
 
-    async def _generate_dockerfile(
-        self, backend_path: Path, analysis_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Generate optimized Dockerfile for Spring Boot."""
-        try:
-            backend_analysis = analysis_data.get("backend", {})
-            build_tool = backend_analysis.get("build_tool", "maven")
-            java_version = backend_analysis.get("java_version", "21")
+    async def _generate_dockerfile(self, analysis_data: Dict[str, Any]) -> str:
+        """Generate optimized Dockerfile using Dedalus CODE_GENERATION model.
 
-            # Use Claude to generate optimized Dockerfile
-            prompt = f"""
-Generate an optimized Dockerfile for a Spring Boot application with the following characteristics:
+        Uses Claude Opus for code generation with escalation policy:
+        if the model struggles, it escalates to the reasoning model.
+        Falls back to the bundled template if the LLM response is not valid.
+        """
+        backend_analysis = analysis_data.get("backend", {})
+        build_tool = backend_analysis.get("build_tool", "maven")
+        java_version = backend_analysis.get("java_version", "21")
+        spring_version = backend_analysis.get("spring_boot_version", "3.x")
+
+        prompt = f"""Generate an optimized Dockerfile for a Spring Boot application:
 - Build tool: {build_tool}
 - Java version: {java_version}
-- Spring Boot version: {backend_analysis.get('spring_boot_version', '3.x')}
+- Spring Boot version: {spring_version}
 
 Requirements:
 1. Multi-stage build to minimize image size
@@ -192,184 +218,54 @@ Requirements:
 3. Optimize layer caching
 4. Non-root user for security
 5. Health check endpoint
-6. Expose port 8080
+6. The application MUST listen on the port specified by the PORT environment variable (default 8080). Use -Dserver.port=${{PORT:-8080}} in the ENTRYPOINT.
+7. If using Spring Boot layered JARs, the correct main class is org.springframework.boot.loader.launch.JarLauncher (NOT ProperLauncherApplication or any other variant).
+8. Prefer using -jar app.jar over layered extraction for simplicity.
 
-Provide ONLY the Dockerfile content, no explanations.
-"""
+Return ONLY valid Dockerfile instructions starting with FROM. Do not include any explanations, summaries, or markdown formatting."""
 
-            dockerfile_content = await self.ask_claude(
-                prompt=prompt,
-                system_prompt="You are a Docker expert specializing in Java applications.",
-                max_tokens=1500,
+        response = await self.run_with_dedalus(
+            prompt=prompt,
+            model=ModelRole.CODE_GENERATION.value,
+            tools=BACKEND_DEPLOYMENT_TOOLS,
+            instructions="You are a Docker expert. Respond with ONLY the raw Dockerfile content. "
+                         "Do not include any explanations, introductions, or summaries before or after.",
+            max_steps=3,
+            policy=_escalation_policy,
+        )
+
+        content = response.strip()
+
+        # Validate that the response contains at least a FROM instruction
+        if not any(line.strip().startswith("FROM") for line in content.split("\n")):
+            self.logger.warning(
+                "LLM response did not contain valid Dockerfile instructions, "
+                "falling back to bundled template"
             )
+            content = self._load_dockerfile_template(java_version, build_tool)
 
-            # Clean up the response
-            dockerfile_content = dockerfile_content.strip()
-            if dockerfile_content.startswith("```dockerfile"):
-                dockerfile_content = dockerfile_content.split("```dockerfile")[1]
-            if dockerfile_content.startswith("```"):
-                dockerfile_content = dockerfile_content.split("```")[1]
-            if dockerfile_content.endswith("```"):
-                dockerfile_content = dockerfile_content.rsplit("```", 1)[0]
+        return content
 
-            dockerfile_content = dockerfile_content.strip()
-
-            # Write Dockerfile
-            dockerfile_path = backend_path / "Dockerfile"
-            dockerfile_path.write_text(dockerfile_content)
-
-            self.logger.info(f"Dockerfile created at: {dockerfile_path}")
-
-            return {"success": True, "dockerfile_path": str(dockerfile_path)}
-
-        except Exception as e:
-            self.logger.error(f"Error generating Dockerfile: {str(e)}")
-            return {"success": False, "error": str(e)}
-
-    async def _build_docker_image(
-        self, backend_path: Path, image_tag: str
-    ) -> Dict[str, Any]:
-        """Build Docker image."""
-        try:
-            # Build for linux/amd64 platform (required by Cloud Run)
-            # This is especially important when building on ARM Macs (M1/M2/M3)
-            build_cmd = f"docker build --platform linux/amd64 -t {image_tag} {backend_path}"
-
-            self.logger.info(f"Building Docker image: {build_cmd}")
-
-            result = await self._run_command(build_cmd)
-
-            if result["returncode"] == 0:
-                return {"success": True}
-            else:
-                return {"success": False, "error": result["stderr"]}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _push_docker_image(self, image_tag: str) -> Dict[str, Any]:
-        """Push Docker image to Artifact Registry."""
-        try:
-            # Configure Docker authentication for Artifact Registry
-            region = image_tag.split("-docker")[0]
-            auth_cmd = f"gcloud auth configure-docker {region}-docker.pkg.dev"
-            await self._run_command(auth_cmd)
-
-            # Push image
-            push_cmd = f"docker push {image_tag}"
-
-            self.logger.info(f"Pushing Docker image: {push_cmd}")
-
-            result = await self._run_command(push_cmd)
-
-            if result["returncode"] == 0:
-                return {"success": True}
-            else:
-                return {"success": False, "error": result["stderr"]}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _deploy_to_cloud_run(
-        self,
-        project_id: str,
-        service_name: str,
-        image_tag: str,
-        gcp_config: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Deploy to Cloud Run."""
-        try:
-            backend_config = gcp_config.get("backend", {})
-            region = gcp_config.get("region", "us-central1")
-
-            # Build Cloud Run deploy command
-            deploy_cmd = [
-                "gcloud run deploy",
-                service_name,
-                f"--image={image_tag}",
-                f"--region={region}",
-                f"--project={project_id}",
-                f"--platform=managed",
-                f"--port={backend_config.get('container_port', 8080)}",
-                f"--memory={backend_config.get('memory', '1Gi')}",
-                f"--cpu={backend_config.get('cpu', '1')}",
-                f"--min-instances={backend_config.get('min_instances', 0)}",
-                f"--max-instances={backend_config.get('max_instances', 10)}",
-                f"--timeout={backend_config.get('timeout', 300)}",
-            ]
-
-            # Add environment variables
-            env_vars = backend_config.get("env_vars", {})
-            if env_vars:
-                env_string = ",".join([f"{k}={v}" for k, v in env_vars.items()])
-                deploy_cmd.append(f"--set-env-vars={env_string}")
-
-            # Allow unauthenticated access if configured
-            if backend_config.get("allow_unauthenticated", True):
-                deploy_cmd.append("--allow-unauthenticated")
-
-            full_cmd = " ".join(deploy_cmd)
-
-            self.logger.info(f"Deploying to Cloud Run: {full_cmd}")
-
-            result = await self._run_command(full_cmd)
-
-            if result["returncode"] == 0:
-                # Extract service URL from output
-                service_url = await self._get_service_url(project_id, service_name, region)
-
-                return {
-                    "success": True,
-                    "service_url": service_url,
-                }
-            else:
-                return {"success": False, "error": result["stderr"]}
-
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def _get_service_url(
-        self, project_id: str, service_name: str, region: str
-    ) -> str:
-        """Get Cloud Run service URL."""
-        try:
-            cmd = (
-                f"gcloud run services describe {service_name} "
-                f"--region={region} "
-                f"--project={project_id} "
-                f"--format='value(status.url)'"
-            )
-
-            result = await self._run_command(cmd)
-
-            if result["returncode"] == 0:
-                return result["stdout"].strip()
-
-        except Exception as e:
-            self.logger.warning(f"Could not get service URL: {str(e)}")
-
-        return f"https://{service_name}-<hash>-{region}.run.app"
-
-    async def _run_command(self, command: str) -> Dict[str, Any]:
-        """Run shell command asynchronously."""
-        try:
-            process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            stdout, stderr = await process.communicate()
-
-            return {
-                "returncode": process.returncode,
-                "stdout": stdout.decode() if stdout else "",
-                "stderr": stderr.decode() if stderr else "",
-            }
-
-        except Exception as e:
-            return {
-                "returncode": 1,
-                "stdout": "",
-                "stderr": str(e),
-            }
+    def _load_dockerfile_template(self, java_version: str, build_tool: str) -> str:
+        """Load the bundled Dockerfile template as a fallback."""
+        template_path = Path(__file__).parent.parent / "templates" / "Dockerfile.spring-boot.template"
+        if template_path.exists():
+            return template_path.read_text()
+        # Inline minimal fallback if template file is missing
+        return (
+            f"FROM maven:3.9-eclipse-temurin-{java_version} AS build\n"
+            f"WORKDIR /app\n"
+            f"COPY pom.xml .\n"
+            f"RUN mvn dependency:go-offline -B\n"
+            f"COPY src ./src\n"
+            f"RUN mvn clean package -DskipTests -B\n"
+            f"\n"
+            f"FROM eclipse-temurin:{java_version}-jre-alpine\n"
+            f"RUN addgroup -S spring && adduser -S spring -G spring\n"
+            f"WORKDIR /app\n"
+            f"COPY --from=build /app/target/*.jar app.jar\n"
+            f"RUN chown -R spring:spring /app\n"
+            f"USER spring:spring\n"
+            f"EXPOSE 8080\n"
+            f"ENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]\n"
+        )

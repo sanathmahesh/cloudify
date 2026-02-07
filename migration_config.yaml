@@ -104,10 +104,19 @@ migration:
     # Enable parallel execution where possible
     parallel_execution: true
 
-# AI Agent Configuration
+# AI Agent Configuration — Powered by Dedalus SDK
 ai:
-  # Claude API model to use
-  model: "claude-opus-4-6"  # claude-opus-4-6, claude-sonnet-4.5, claude-haiku-4.5
+  # Default model (used as fallback; each agent selects optimal model via handoffs)
+  model: "anthropic/claude-opus-4-6"
+
+  # Multi-model routing configuration (Dedalus SDK handles handoffs)
+  # Each migration phase automatically uses the best model:
+  #   Code Analysis:    openai/gpt-4.1 (reasoning)
+  #   Infrastructure:   anthropic/claude-sonnet-4-5-20250514 (planning)
+  #   Database:         openai/gpt-4.1 + anthropic/claude-opus-4-6 (multi-model)
+  #   Backend Deploy:   anthropic/claude-opus-4-6 (code generation)
+  #   Frontend Deploy:  openai/gpt-4.1-mini (fast, simple tasks)
+  #   Error Recovery:   Policy-based escalation (fast -> reasoning)
 
   # Temperature for AI decision-making (0.0-1.0)
   temperature: 0.3
@@ -117,6 +126,10 @@ ai:
 
   # Enable AI-powered recommendations
   recommendations_enabled: true
+
+  # MCP servers to connect (via Dedalus SDK marketplace)
+  mcp_servers:
+    - "windsor/brave-search-mcp"  # Research best practices & debug errors
 
 # Post-Migration Configuration
 post_migration:
