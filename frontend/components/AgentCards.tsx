@@ -6,12 +6,10 @@ import CardSpotlight from "./CardSpotlight";
 
 const agents = [
   {
-    num: "00",
+    num: "01",
     title: "Event-Driven Orchestration",
     description:
       "Agents coordinate via pub-sub event bus for parallel execution and clear dependency management. The brain of the operation.",
-    span: "col-span-1 sm:col-span-2 lg:col-span-3",
-    height: "min-h-[260px]",
     showDiagram: true,
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -21,12 +19,10 @@ const agents = [
     ),
   },
   {
-    num: "01",
+    num: "02",
     title: "Code Analysis",
     description:
       "Scans Spring Boot properties, detects databases, identifies API endpoints and CORS settings.",
-    span: "col-span-1 lg:col-span-1 lg:row-span-2",
-    height: "min-h-[220px] lg:min-h-[360px]",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -34,12 +30,10 @@ const agents = [
     ),
   },
   {
-    num: "02",
+    num: "03",
     title: "Infrastructure Provisioning",
     description:
       "Creates Cloud Run services, Artifact Registry, Firebase projects, and configures IAM — all automated.",
-    span: "col-span-1 lg:col-span-2",
-    height: "min-h-[220px]",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
@@ -47,12 +41,10 @@ const agents = [
     ),
   },
   {
-    num: "03",
+    num: "04",
     title: "Database Migration",
     description:
       "Keeps H2 for dev or migrates to Cloud SQL (PostgreSQL). Handles schema and data transfer.",
-    span: "col-span-1 lg:col-span-2",
-    height: "min-h-[220px]",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
@@ -60,12 +52,10 @@ const agents = [
     ),
   },
   {
-    num: "04",
+    num: "05",
     title: "Backend Deployment",
     description:
       "Generates optimized multi-stage Dockerfiles, builds images, and deploys to Cloud Run.",
-    span: "col-span-1 lg:col-span-1",
-    height: "min-h-[200px]",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
@@ -73,12 +63,10 @@ const agents = [
     ),
   },
   {
-    num: "05",
+    num: "06",
     title: "Frontend Deployment",
     description:
       "Detects Vite or CRA, updates API endpoints, builds production bundles, deploys to Firebase Hosting.",
-    span: "col-span-1 sm:col-span-2 lg:col-span-2",
-    height: "min-h-[220px]",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" />
@@ -88,6 +76,9 @@ const agents = [
 ];
 
 export default function AgentCards() {
+  const cardSpan = "col-span-1";
+  const cardHeight = "h-[320px] lg:h-[340px]";
+
   return (
     <section id="agents" className="py-24">
       <div className="max-w-7xl mx-auto px-6">
@@ -113,17 +104,17 @@ export default function AgentCards() {
               <motion.div
                 whileHover={{ y: -4 }}
                 transition={{ duration: 0.2 }}
-                className={agent.span}
+                className={cardSpan}
               >
                 <CardSpotlight
-                  className={`bg-bg-card border border-border-subtle rounded-3xl p-8 cursor-default group hover:border-accent-purple/30 transition-colors duration-300 h-full ${agent.height} ${
-                    agent.num === "00" ? "bg-gradient-to-br from-bg-card to-accent-purple/5" : ""
+                  className={`bg-bg-card border border-border-subtle rounded-3xl p-8 cursor-default group hover:border-accent-purple/30 transition-colors duration-300 h-full ${cardHeight} ${
+                    agent.showDiagram ? "bg-gradient-to-br from-bg-card to-accent-purple/5" : ""
                   }`}
                 >
                   <div className="relative z-10">
                     <div className="flex items-center gap-3 mb-4">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        agent.num === "00" ? "bg-accent-purple/20 text-accent-purple-light" : "bg-accent-purple/10 text-accent-purple"
+                        agent.showDiagram ? "bg-accent-purple/20 text-accent-purple-light" : "bg-accent-purple/10 text-accent-purple"
                       }`}>
                         {agent.icon}
                       </div>
@@ -132,7 +123,7 @@ export default function AgentCards() {
                       </span>
                     </div>
                     <h3 className={`text-text-primary font-semibold mb-3 ${
-                      agent.num === "00" ? "text-xl" : "text-lg"
+                      agent.showDiagram ? "text-xl" : "text-lg"
                     }`}>
                       {agent.title}
                     </h3>
