@@ -53,8 +53,9 @@ migration_report.md
 *.backup
 
 # GCP credentials
-*.json
-!migration_config.yaml
+**/service-account*.json
+**/credentials*.json
+*-key.json
 
 # Testing
 .pytest_cache/
