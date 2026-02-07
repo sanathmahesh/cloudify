@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+node_modules
 
 # Virtual environments
 venv/
@@ -64,3 +65,7 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+
+
+.next
