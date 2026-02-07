@@ -439,16 +439,85 @@ async def write_dockerfile(backend_path: str, content: str) -> str:
     """
     try:
         path = Path(backend_path) / "Dockerfile"
-        # Clean markdown code fences if present
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```\w*\n?", "", cleaned)
-        if cleaned.endswith("```"):
-            cleaned = cleaned.rsplit("```", 1)[0]
-        path.write_text(cleaned.strip())
+        cleaned = _clean_dockerfile_content(content)
+        if not cleaned:
+            return json.dumps({"success": False, "error": "No valid Dockerfile instructions found in generated content"})
+        path.write_text(cleaned)
         return json.dumps({"success": True, "path": str(path)})
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})
+
+
+# Valid Dockerfile instruction keywords (must appear at start of a line)
+_DOCKERFILE_INSTRUCTIONS = frozenset({
+    "FROM", "RUN", "CMD", "LABEL", "MAINTAINER", "EXPOSE", "ENV", "ADD",
+    "COPY", "ENTRYPOINT", "VOLUME", "USER", "WORKDIR", "ARG", "ONBUILD",
+    "STOPSIGNAL", "HEALTHCHECK", "SHELL",
+})
+
+
+def _clean_dockerfile_content(content: str) -> str:
+    """Extract valid Dockerfile content from an LLM response.
+
+    Strips markdown fences, explanatory prose before/after the Dockerfile,
+    and returns only the actual Dockerfile instructions (including comments).
+    """
+    text = content.strip()
+
+    # Strip markdown code fences (```dockerfile ... ```)
+    if "```" in text:
+        blocks = re.findall(r"```[\w]*\n(.*?)```", text, re.DOTALL)
+        if blocks:
+            # Use the longest fenced block (most likely the Dockerfile)
+            text = max(blocks, key=len).strip()
+
+    lines = text.split("\n")
+
+    # Find the first line that starts with a valid Dockerfile instruction
+    start_idx = None
+    for i, line in enumerate(lines):
+        first_word = line.split()[0] if line.strip() else ""
+        if first_word in _DOCKERFILE_INSTRUCTIONS:
+            start_idx = i
+            break
+
+    if start_idx is None:
+        return ""
+
+    # Include comment lines (starting with #) that appear before the first instruction
+    # (e.g. "# Multi-stage Dockerfile for Spring Boot")
+    while start_idx > 0 and lines[start_idx - 1].strip().startswith("#"):
+        start_idx -= 1
+
+    # Find the last line that is a valid instruction, continuation (\), comment, or
+    # non-empty line that belongs to the Dockerfile (e.g. argument to a multi-line RUN)
+    end_idx = start_idx
+    for i in range(start_idx, len(lines)):
+        stripped = lines[i].strip()
+        if not stripped:
+            # Allow blank lines within the Dockerfile
+            continue
+        first_word = stripped.split()[0] if stripped else ""
+        if (
+            first_word in _DOCKERFILE_INSTRUCTIONS
+            or stripped.startswith("#")
+            or stripped.startswith("&&")
+            or stripped.startswith("||")
+            or stripped.startswith("-")
+            or stripped.endswith("\\")
+            or (i > 0 and lines[i - 1].rstrip().endswith("\\"))
+        ):
+            end_idx = i
+        else:
+            # Check if this looks like a continuation of a prior multi-line command
+            # (indented lines after a backslash continuation, or quoted strings)
+            if i > 0 and (lines[i - 1].rstrip().endswith("\\") or stripped.startswith('"')):
+                end_idx = i
+            else:
+                # Likely prose/explanation after the Dockerfile — stop here
+                break
+
+    return "\n".join(lines[start_idx : end_idx + 1]).strip()
 
 
 async def build_docker_image(backend_path: str, image_tag: str) -> str:

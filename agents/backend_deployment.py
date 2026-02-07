@@ -199,6 +199,7 @@ class BackendDeploymentAgent(BaseAgent):
 
         Uses Claude Opus for code generation with escalation policy:
         if the model struggles, it escalates to the reasoning model.
+        Falls back to the bundled template if the LLM response is not valid.
         """
         backend_analysis = analysis_data.get("backend", {})
         build_tool = backend_analysis.get("build_tool", "maven")
@@ -218,15 +219,50 @@ Requirements:
 5. Health check endpoint
 6. Expose port 8080
 
-Provide ONLY the Dockerfile content, no explanations or markdown fences."""
+Return ONLY valid Dockerfile instructions starting with FROM. Do not include any explanations, summaries, or markdown formatting."""
 
         response = await self.run_with_dedalus(
             prompt=prompt,
             model=ModelRole.CODE_GENERATION.value,
             tools=BACKEND_DEPLOYMENT_TOOLS,
-            instructions="You are a Docker expert specializing in Java applications. Output only Dockerfile content.",
+            instructions="You are a Docker expert. Respond with ONLY the raw Dockerfile content. "
+                         "Do not include any explanations, introductions, or summaries before or after.",
             max_steps=3,
             policy=_escalation_policy,
         )
 
-        return response.strip()
+        content = response.strip()
+
+        # Validate that the response contains at least a FROM instruction
+        if not any(line.strip().startswith("FROM") for line in content.split("\n")):
+            self.logger.warning(
+                "LLM response did not contain valid Dockerfile instructions, "
+                "falling back to bundled template"
+            )
+            content = self._load_dockerfile_template(java_version, build_tool)
+
+        return content
+
+    def _load_dockerfile_template(self, java_version: str, build_tool: str) -> str:
+        """Load the bundled Dockerfile template as a fallback."""
+        template_path = Path(__file__).parent.parent / "templates" / "Dockerfile.spring-boot.template"
+        if template_path.exists():
+            return template_path.read_text()
+        # Inline minimal fallback if template file is missing
+        return (
+            f"FROM maven:3.9-eclipse-temurin-{java_version} AS build\n"
+            f"WORKDIR /app\n"
+            f"COPY pom.xml .\n"
+            f"RUN mvn dependency:go-offline -B\n"
+            f"COPY src ./src\n"
+            f"RUN mvn clean package -DskipTests -B\n"
+            f"\n"
+            f"FROM eclipse-temurin:{java_version}-jre-alpine\n"
+            f"RUN addgroup -S spring && adduser -S spring -G spring\n"
+            f"WORKDIR /app\n"
+            f"COPY --from=build /app/target/*.jar app.jar\n"
+            f"RUN chown -R spring:spring /app\n"
+            f"USER spring:spring\n"
+            f"EXPOSE 8080\n"
+            f"ENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]\n"
+        )

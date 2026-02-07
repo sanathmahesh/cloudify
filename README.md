@@ -93,8 +93,8 @@ Before using Cloudify, ensure you have the following installed:
   ```
 
 ### API Keys
-- **Anthropic Claude API Key** ([Get one here](https://console.anthropic.com/))
-- **Dedalus API Key** (if using Dedalus features) ([Get one here](https://dedaluslabs.ai/))
+- **Dedalus API Key** (primary) ([Get one here](https://dedaluslabs.ai/))
+- **Anthropic Claude API Key** (fallback if Dedalus key not set) ([Get one here](https://console.anthropic.com/))
 
 ## 🚀 Quick Start
 
@@ -123,8 +123,8 @@ pip install -r requirements.txt
 cp .env.example .env
 
 # Edit .env and add your API keys
-ANTHROPIC_API_KEY=your-claude-api-key-here
 DEDALUS_API_KEY=your-dedalus-api-key-here
+ANTHROPIC_API_KEY=your-claude-api-key-here  # fallback if DEDALUS_API_KEY not set
 ```
 
 ### 4. Set Up GCP Authentication
@@ -191,6 +191,16 @@ Options:
   -d, --dry-run               Preview changes without executing
   -v, --verbose               Enable verbose logging
   --help                      Show this message and exit
+```
+
+### Other Commands
+
+```bash
+# Initialize a new migration configuration file
+python migration_orchestrator.py init
+
+# Show version and SDK information
+python migration_orchestrator.py version
 ```
 
 ### Configuration File
@@ -309,7 +319,8 @@ Cloudify/
 │   ├── infrastructure.py          # GCP infrastructure provisioning
 │   ├── database_migration.py      # Database migration logic
 │   ├── backend_deployment.py      # Backend to Cloud Run
-│   └── frontend_deployment.py     # Frontend to Firebase
+│   ├── frontend_deployment.py     # Frontend to Firebase
+│   └── dedalus_tools.py           # Dedalus SDK tool definitions
 ├── utils/
 │   ├── __init__.py
 │   ├── gcp_helpers.py             # GCP API helpers
@@ -321,10 +332,17 @@ Cloudify/
 ├── tests/
 │   ├── unit/
 │   └── integration/
+├── frontend/                      # Sample frontend application
 ├── migration_orchestrator.py      # Main CLI entry point
 ├── migration_config.yaml          # Configuration template
 ├── requirements.txt               # Python dependencies
+├── setup.py                       # Package setup
+├── quickstart.sh                  # Quick start script
 ├── .env.example                   # Environment variables template
+├── ARCHITECTURE.md                # Architecture documentation
+├── CONTRIBUTING.md                # Contributing guide
+├── PROJECT_SUMMARY.md             # Project summary
+├── LICENSE                        # MIT License
 └── README.md                      # This file
 ```
 
