@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Dedalus](https://img.shields.io/badge/powered%20by-Dedalus%20AI-purple.svg)
 
-> Automated migration of Spring Boot + React + H2 applications to Google Cloud Platform using AI agents
+> Automated migration of local applications to Google Cloud Platform using AI agents
 
 Cloudify is an intelligent, multi-agent system built with [Dedalus AI](http://dedaluslabs.ai/) that automates the complete migration process from local development to Google Cloud Platform. Perfect for hackathons and rapid prototyping!
 
